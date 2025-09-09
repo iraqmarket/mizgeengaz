@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from "react"
-import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,9 +9,11 @@ import { Label } from "@/components/ui/label"
 import { Truck } from "lucide-react"
 import Link from "next/link"
 
-export default function SignIn() {
+export default function SignUp() {
   const [email, setEmail] = useState("")
+  const [name, setName] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
@@ -20,22 +21,36 @@ export default function SignIn() {
     e.preventDefault()
     setIsLoading(true)
 
+    if (password !== confirmPassword) {
+      alert("Passwords don't match")
+      setIsLoading(false)
+      return
+    }
+
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          name,
+          password,
+        }),
       })
 
-      if (result?.ok) {
-        router.push("/")
-        router.refresh()
+      const data = await response.json()
+
+      if (response.ok) {
+        alert("Account created successfully! Please sign in.")
+        router.push("/auth/signin")
       } else {
-        alert("Invalid credentials")
+        alert(data.error || "Failed to create account")
       }
     } catch (error) {
-      console.error("Sign in error:", error)
-      alert("Sign in failed")
+      console.error("Sign up error:", error)
+      alert("Sign up failed")
     } finally {
       setIsLoading(false)
     }
@@ -48,13 +63,24 @@ export default function SignIn() {
           <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-blue-600 flex items-center justify-center">
             <Truck className="h-6 w-6 text-white" />
           </div>
-          <CardTitle className="text-2xl">Welcome to PropaneGo</CardTitle>
+          <CardTitle className="text-2xl">Join PropaneGo</CardTitle>
           <CardDescription>
-            Sign in to your account to order propane delivery
+            Create your account to start ordering propane delivery
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Enter your full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
             <div>
               <Label htmlFor="email">Email</Label>
               <Input
@@ -71,10 +97,23 @@ export default function SignIn() {
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder="Create a password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={6}
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="Confirm your password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={6}
               />
             </div>
             <Button 
@@ -82,14 +121,14 @@ export default function SignIn() {
               className="w-full bg-blue-600 hover:bg-blue-700"
               disabled={isLoading}
             >
-              {isLoading ? "Signing in..." : "Sign In"}
+              {isLoading ? "Creating Account..." : "Create Account"}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
             <p className="text-gray-600">
-              Don't have an account?{" "}
-              <Link href="/auth/signup" className="text-blue-600 hover:underline">
-                Sign up
+              Already have an account?{" "}
+              <Link href="/auth/signin" className="text-blue-600 hover:underline">
+                Sign in
               </Link>
             </p>
           </div>

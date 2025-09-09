@@ -1,5 +1,9 @@
 import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
+import bcrypt from "bcryptjs"
+import { PrismaClient } from "@prisma/client"
+
+const prisma = new PrismaClient()
 
 const handler = NextAuth({
   providers: [
@@ -14,17 +18,30 @@ const handler = NextAuth({
           return null
         }
         
-        // For demo purposes, accept any email/password
-        // In production, verify against your database
-        if (credentials.email && credentials.password) {
-          return {
-            id: "1",
-            email: credentials.email,
-            name: credentials.email.split("@")[0],
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email }
+          })
+
+          if (!user) {
+            return null
           }
+
+          const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
+          
+          if (!isPasswordValid) {
+            return null
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+          }
+        } catch (error) {
+          console.error("Auth error:", error)
+          return null
         }
-        
-        return null
       }
     })
   ],
