@@ -1,27 +1,151 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useSession, signIn, signOut } from "next-auth/react"
-import { Truck, Clock, Shield, Star, MapPin, Phone, CreditCard } from "lucide-react"
+import { Truck, Clock, Shield, Star, MapPin, Phone, CreditCard, User, Loader2, Package } from "lucide-react"
+import { toast } from "sonner"
+import Link from "next/link"
+
+interface TankPrice {
+  id: string
+  type: string
+  basePrice: number
+  deliveryFee: number
+  isActive: boolean
+  totalPrice?: number
+}
 
 export function LandingPage() {
   const { data: session } = useSession()
-  const [selectedSize, setSelectedSize] = useState("20lb")
+  const [selectedType, setSelectedType] = useState("")
   const [quantity, setQuantity] = useState(1)
+  const [deliveryAddress, setDeliveryAddress] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false)
+  const [hasCompleteProfile, setHasCompleteProfile] = useState(false)
+  const [tankPrices, setTankPrices] = useState<TankPrice[]>([])
+  const [loadingPrices, setLoadingPrices] = useState(true)
 
-  const tankSizes = [
-    { size: "20lb", price: 24.99, description: "Standard BBQ tank" },
-    { size: "30lb", price: 34.99, description: "Large BBQ tank" },
-    { size: "40lb", price: 44.99, description: "RV/Forklift tank" },
-    { size: "100lb", price: 89.99, description: "Commercial tank" }
-  ]
+  const selectedTank = tankPrices.find(tank => tank.type === selectedType)
+  const totalPrice = selectedTank ? (selectedTank.basePrice + selectedTank.deliveryFee) * quantity : 0
 
-  const selectedTank = tankSizes.find(tank => tank.size === selectedSize)
-  const totalPrice = selectedTank ? selectedTank.price * quantity : 0
+  // Fetch tank prices
+  const fetchPrices = async () => {
+    try {
+      setLoadingPrices(true)
+      const response = await fetch('/api/admin/prices')
+      if (response.ok) {
+        const data = await response.json()
+        const activePrices = data.prices.filter((price: TankPrice) => price.isActive)
+        setTankPrices(activePrices)
+        
+        // Auto-select first available tank type
+        if (activePrices.length > 0 && !selectedType) {
+          setSelectedType(activePrices[0].type)
+        }
+      } else {
+        toast.error('Failed to load pricing information')
+      }
+    } catch (error) {
+      console.error('Error fetching prices:', error)
+      toast.error('Failed to load pricing information')
+    } finally {
+      setLoadingPrices(false)
+    }
+  }
+
+  // Fetch prices on component mount
+  useEffect(() => {
+    fetchPrices()
+  }, [])
+
+  // Fetch user profile data when session is available
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!session?.user) return
+      
+      setIsLoadingProfile(true)
+      try {
+        const response = await fetch('/api/user/profile')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.user) {
+            setDeliveryAddress(data.user.address || '')
+            setPhoneNumber(data.user.phoneNumber || '')
+            setHasCompleteProfile(data.user.hasCompleteProfile)
+            
+            if (data.user.hasCompleteProfile) {
+              toast.success('Your delivery info has been loaded from your profile!')
+            } else if (data.user.address || data.user.phoneNumber) {
+              toast.info('Some profile info loaded. You can complete missing details below.')
+            }
+          }
+        } else {
+          console.error('Failed to fetch profile')
+        }
+      } catch (error) {
+        console.error('Profile fetch error:', error)
+      } finally {
+        setIsLoadingProfile(false)
+      }
+    }
+
+    fetchUserProfile()
+  }, [session])
+
+  const handleOrderSubmit = async () => {
+    if (!selectedTank) {
+      toast.error('Please select a tank type')
+      return
+    }
+    
+    if (!deliveryAddress.trim()) {
+      toast.error('Please enter a delivery address')
+      return
+    }
+    
+    if (!phoneNumber.trim()) {
+      toast.error('Please enter a phone number')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tankType: selectedTank.type,
+          quantity,
+          deliveryAddress,
+          phoneNumber
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        toast.success(`Order submitted successfully! Order ID: ${result.order.id}`)
+        
+        // Reset form
+        setQuantity(1)
+        // Keep selected tank and address for convenience
+        
+        // Could redirect to order confirmation page
+        // router.push(`/orders/${result.order.id}`)
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to submit order')
+      }
+    } catch (error) {
+      console.error('Error submitting order:', error)
+      toast.error('Failed to submit order')
+    }
+  }
 
   if (!session) {
     return (
@@ -64,6 +188,12 @@ export function LandingPage() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">Welcome, {session.user?.name}</span>
+            <Link href="/user">
+              <Button variant="outline" size="sm" className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                My Dashboard
+              </Button>
+            </Link>
             <Button variant="outline" size="sm" onClick={() => signOut()}>
               Sign Out
             </Button>
@@ -113,28 +243,45 @@ export function LandingPage() {
             <CardContent className="space-y-6">
               {/* Tank Selection */}
               <div>
-                <Label className="text-base font-medium mb-4 block">Select Tank Size</Label>
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {tankSizes.map((tank) => (
-                    <div
-                      key={tank.size}
-                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                        selectedSize === tank.size
-                          ? 'border-blue-600 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => setSelectedSize(tank.size)}
-                    >
-                      <div className="text-center">
-                        <div className="text-lg font-bold">{tank.size}</div>
-                        <div className="text-sm text-gray-600 mb-2">{tank.description}</div>
-                        <div className="text-xl font-semibold text-blue-600">
-                          ${tank.price}
+                <Label className="text-base font-medium mb-4 block">Select Tank Type</Label>
+                {loadingPrices ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <span className="ml-3 text-gray-600">Loading available tanks...</span>
+                  </div>
+                ) : tankPrices.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No tanks are currently available for delivery.</p>
+                    <p className="text-sm">Please check back later.</p>
+                  </div>
+                ) : (
+                  <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {tankPrices.map((tank) => (
+                      <div
+                        key={tank.id}
+                        className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                          selectedType === tank.type
+                            ? 'border-blue-600 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => setSelectedType(tank.type)}
+                      >
+                        <div className="text-center">
+                          <div className="text-lg font-bold">{tank.type}</div>
+                          <div className="text-sm text-gray-600 mb-2">
+                            Base: {tank.basePrice.toLocaleString()} IQD
+                          </div>
+                          <div className="text-xs text-gray-500 mb-2">
+                            Delivery: {tank.deliveryFee.toLocaleString()} IQD
+                          </div>
+                          <div className="text-xl font-semibold text-blue-600">
+                            {(tank.basePrice + tank.deliveryFee).toLocaleString()} IQD
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Quantity */}
@@ -166,30 +313,75 @@ export function LandingPage() {
                 </div>
               </div>
 
+              {/* Profile Status Indicator */}
+              {session && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    {isLoadingProfile ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                        <span className="text-sm text-blue-800">Loading your profile...</span>
+                      </>
+                    ) : hasCompleteProfile ? (
+                      <>
+                        <User className="h-4 w-4 text-green-600" />
+                        <span className="text-sm text-green-800">Profile information loaded automatically</span>
+                      </>
+                    ) : (
+                      <>
+                        <User className="h-4 w-4 text-orange-600" />
+                        <span className="text-sm text-orange-800">Complete your profile info below</span>
+                      </>
+                    )}
+                  </div>
+                  {!isLoadingProfile && !hasCompleteProfile && (
+                    <p className="text-xs text-blue-700">
+                      Your address and phone will be saved to your profile for faster checkout next time.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Delivery Info */}
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <Label htmlFor="address" className="text-base font-medium">Delivery Address</Label>
+                  <Label htmlFor="address" className="text-base font-medium">
+                    Delivery Address
+                    {hasCompleteProfile && (
+                      <span className="text-xs text-green-600 ml-2">(from profile)</span>
+                    )}
+                  </Label>
                   <div className="flex gap-2 mt-2">
                     <Input
                       id="address"
                       placeholder="Enter your address"
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
                       className="flex-1"
+                      disabled={isLoadingProfile}
                     />
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" disabled={isLoadingProfile}>
                       <MapPin className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="phone" className="text-base font-medium">Phone Number</Label>
+                  <Label htmlFor="phone" className="text-base font-medium">
+                    Phone Number
+                    {hasCompleteProfile && (
+                      <span className="text-xs text-green-600 ml-2">(from profile)</span>
+                    )}
+                  </Label>
                   <div className="flex gap-2 mt-2">
                     <Input
                       id="phone"
-                      placeholder="(555) 123-4567"
+                      placeholder="+964 (770) 123-4567"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
                       className="flex-1"
+                      disabled={isLoadingProfile}
                     />
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" disabled={isLoadingProfile}>
                       <Phone className="h-4 w-4" />
                     </Button>
                   </div>
@@ -201,18 +393,37 @@ export function LandingPage() {
                 <div className="flex justify-between items-center mb-4">
                   <span className="text-lg">Order Total:</span>
                   <span className="text-2xl font-bold text-blue-600">
-                    ${totalPrice.toFixed(2)}
+                    {totalPrice.toLocaleString()} IQD
                   </span>
                 </div>
-                <div className="text-sm text-gray-600 mb-6">
-                  {quantity}x {selectedSize} Tank{quantity > 1 ? 's' : ''} 
-                  {selectedTank && ` (${selectedTank.description})`}
-                </div>
+                {selectedTank && (
+                  <div className="text-sm text-gray-600 mb-4 space-y-1">
+                    <div className="flex justify-between">
+                      <span>{quantity}x {selectedTank.type}</span>
+                      <span>{(selectedTank.basePrice * quantity).toLocaleString()} IQD</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Delivery Fee</span>
+                      <span>{(selectedTank.deliveryFee * quantity).toLocaleString()} IQD</span>
+                    </div>
+                  </div>
+                )}
                 
-                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6">
-                  <CreditCard className="h-5 w-5 mr-2" />
-                  Schedule Delivery - ${totalPrice.toFixed(2)}
-                </Button>
+                <Link href="/user/order">
+                  <Button 
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6"
+                    disabled={loadingPrices || isLoadingProfile}
+                  >
+                    <CreditCard className="h-5 w-5 mr-2" />
+                    {loadingPrices || isLoadingProfile ? 'Loading...' : 'Go to Order Dashboard'}
+                  </Button>
+                </Link>
+                
+                {(!deliveryAddress.trim() || !phoneNumber.trim()) && (
+                  <p className="text-sm text-orange-600 text-center mt-2">
+                    Please fill in your delivery address and phone number to continue
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -222,7 +433,7 @@ export function LandingPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Clock className="h-8 w-8 text-green-600" />
+                  <Clock className="h-8 w-8 text-blue-600" />
                   <div>
                     <div className="font-semibold">Estimated Delivery</div>
                     <div className="text-sm text-gray-600">Today, 2:30 PM - 4:30 PM</div>
@@ -230,7 +441,9 @@ export function LandingPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-sm text-gray-600">Delivery Fee</div>
-                  <div className="font-semibold text-green-600">FREE</div>
+                  <div className="font-semibold text-blue-600">
+                    {selectedTank ? `${selectedTank.deliveryFee.toLocaleString()} IQD` : 'Select tank first'}
+                  </div>
                 </div>
               </div>
             </CardContent>

@@ -14,13 +14,24 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  orders    Order[]
+  id               String       @id @default(cuid())
+  email            String       @unique
+  name             String?
+  password         String
+  phoneNumber      String?
+  addressType      AddressType?
+  address          String?
+  mapPinLat        Float?
+  mapPinLng        Float?
+  complexName      String?
+  buildingNumber   String?
+  floorNumber      String?
+  apartmentNumber  String?
+  role             UserRole     @default(CUSTOMER)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  orders           Order[]
+  driver           Driver?
 
   @@map("users")
 }
@@ -29,22 +40,75 @@ model Order {
   id           String      @id @default(cuid())
   userId       String
   user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  driverId     String?
+  driver       Driver?     @relation(fields: [driverId], references: [id])
   tankSize     String
   quantity     Int
   totalPrice   Float
   deliveryAddress String
   phoneNumber  String
   status       OrderStatus @default(PENDING)
+  scheduledAt  DateTime?
+  deliveredAt  DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
   @@map("orders")
 }
 
+model Driver {
+  id           String       @id @default(cuid())
+  userId       String       @unique
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseNumber String      @unique
+  vehicleType   String
+  vehiclePlate  String      @unique
+  status        DriverStatus @default(AVAILABLE)
+  currentLat    Float?
+  currentLng    Float?
+  orders        Order[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("drivers")
+}
+
+model Price {
+  id          String    @id @default(cuid())
+  type        String    @unique
+  basePrice   Float
+  deliveryFee Float
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("prices")
+}
+
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  ADMIN
+}
+
+enum AddressType {
+  HOME
+  BUSINESS
+  APARTMENT
+}
+
 enum OrderStatus {
   PENDING
   CONFIRMED
+  ASSIGNED
   IN_TRANSIT
   DELIVERED
   CANCELLED
+}
+
+enum DriverStatus {
+  AVAILABLE
+  BUSY
+  OFFLINE
+  SUSPENDED
 }
