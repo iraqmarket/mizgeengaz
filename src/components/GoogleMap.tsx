@@ -44,6 +44,9 @@ export default function GoogleMap({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let checkInterval: NodeJS.Timeout | undefined
+    let timeoutId: NodeJS.Timeout | undefined
+
     if (!apiKey) {
       setError('Google Maps API key not configured')
       setLoading(false)
@@ -57,10 +60,33 @@ export default function GoogleMap({
         return
       }
 
+      // Check if script is already loading or loaded
+      const existingScript = document.querySelector('script[src*="maps.googleapis.com/maps/api"]')
+      if (existingScript) {
+        // Script already exists, wait for it to load
+        checkInterval = setInterval(() => {
+          if (window.google && window.google.maps) {
+            if (checkInterval) clearInterval(checkInterval)
+            initializeMap()
+          }
+        }, 100)
+        
+        // Set a timeout to prevent infinite waiting
+        timeoutId = setTimeout(() => {
+          if (checkInterval) clearInterval(checkInterval)
+          if (!window.google || !window.google.maps) {
+            setError('Google Maps is still loading, please refresh')
+            setLoading(false)
+          }
+        }, 5000)
+        return
+      }
+
       const script = document.createElement('script')
       script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry`
       script.async = true
       script.defer = true
+      script.id = 'google-maps-script'
       script.onload = () => {
         if (window.google && window.google.maps) {
           initializeMap()
@@ -74,10 +100,6 @@ export default function GoogleMap({
         setLoading(false)
       }
       document.head.appendChild(script)
-
-      return () => {
-        document.head.removeChild(script)
-      }
     }
 
     const initializeMap = () => {
@@ -108,6 +130,12 @@ export default function GoogleMap({
     }
 
     loadGoogleMaps()
+
+    // Cleanup function
+    return () => {
+      if (checkInterval) clearInterval(checkInterval)
+      if (timeoutId) clearTimeout(timeoutId)
+    }
   }, [apiKey, center.lat, center.lng, zoom, onMapReady])
 
   // Update markers when they change

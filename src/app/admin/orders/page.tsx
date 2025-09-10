@@ -1,28 +1,40 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Package, Search, Filter, Eye, MapPin, Clock, User, Phone } from "lucide-react"
+import { Package, Search, Filter, Eye, MapPin, Clock, User, Phone, Loader2, RefreshCw, Truck, CheckCircle, XCircle } from "lucide-react"
+import { toast } from "sonner"
 
 interface Order {
   id: string
-  customerName: string
-  customerEmail: string
-  customerPhone: string
-  driverName?: string
+  userId: string
+  user: {
+    id: string
+    name: string
+    email: string
+    phoneNumber?: string
+  }
+  driverId?: string
+  driver?: {
+    id: string
+    user: {
+      name: string
+      phoneNumber?: string
+    }
+  }
   tankSize: string
   quantity: number
   totalPrice: number
   deliveryAddress: string
+  phoneNumber: string
   status: 'PENDING' | 'CONFIRMED' | 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
   scheduledAt?: string
   deliveredAt?: string
   createdAt: string
+  updatedAt: string
 }
-
-// Orders will be fetched from API
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -43,15 +55,117 @@ const getStatusColor = (status: string) => {
   }
 }
 
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case 'PENDING':
+      return <Clock className="h-4 w-4" />
+    case 'CONFIRMED':
+      return <CheckCircle className="h-4 w-4" />
+    case 'ASSIGNED':
+      return <User className="h-4 w-4" />
+    case 'IN_TRANSIT':
+      return <Truck className="h-4 w-4" />
+    case 'DELIVERED':
+      return <Package className="h-4 w-4" />
+    case 'CANCELLED':
+      return <XCircle className="h-4 w-4" />
+    default:
+      return <Package className="h-4 w-4" />
+  }
+}
+
 export default function OrdersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("ALL")
-  const [orders] = useState<Order[]>([]) // Will be populated with real API data later
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  // Fetch orders from API
+  const fetchOrders = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/admin/orders')
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders')
+      }
+      
+      const data = await response.json()
+      setOrders(data.orders || [])
+    } catch (error) {
+      console.error('Error fetching orders:', error)
+      toast.error('Failed to load orders')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Refresh orders
+  const refreshOrders = async () => {
+    try {
+      setRefreshing(true)
+      const response = await fetch('/api/admin/orders')
+      
+      if (!response.ok) {
+        throw new Error('Failed to refresh orders')
+      }
+      
+      const data = await response.json()
+      setOrders(data.orders || [])
+      toast.success('Orders refreshed')
+    } catch (error) {
+      console.error('Error refreshing orders:', error)
+      toast.error('Failed to refresh orders')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  // Update order status
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/admin/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update order status')
+      }
+
+      toast.success(`Order ${newStatus.toLowerCase()}`)
+      await refreshOrders()
+    } catch (error) {
+      console.error('Error updating order:', error)
+      toast.error('Failed to update order status')
+    }
+  }
+
+  // Load orders on mount
+  useEffect(() => {
+    fetchOrders()
+  }, [])
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshOrders()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customerEmail.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = 
+      order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.phoneNumber.includes(searchTerm) ||
+      order.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesStatus = statusFilter === "ALL" || order.status === statusFilter
     
@@ -68,13 +182,32 @@ export default function OrdersPage() {
     CANCELLED: orders.filter(o => o.status === 'CANCELLED').length,
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <span className="ml-3 text-gray-600">Loading orders...</span>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
-        <p className="text-gray-600 mt-2">
-          Manage and track all customer orders
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+          <p className="text-gray-600 mt-2">
+            Manage and track all customer orders
+          </p>
+        </div>
+        <Button 
+          onClick={refreshOrders} 
+          disabled={refreshing}
+          variant="outline"
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       {/* Order Statistics */}
@@ -88,6 +221,9 @@ export default function OrdersPage() {
             onClick={() => setStatusFilter(status)}
           >
             <CardContent className="p-4 text-center">
+              <div className="flex justify-center mb-2">
+                {status !== 'ALL' && getStatusIcon(status)}
+              </div>
               <p className="text-2xl font-bold text-gray-900">{count}</p>
               <p className="text-xs text-gray-600 capitalize">
                 {status.toLowerCase().replace('_', ' ')}
@@ -105,7 +241,7 @@ export default function OrdersPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Search orders by ID, customer name, or email..."
+                  placeholder="Search orders by ID, customer, phone, or address..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -143,18 +279,19 @@ export default function OrdersPage() {
                     <Package className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900">{order.id}</h3>
+                    <h3 className="font-semibold text-gray-900">Order #{order.id.slice(-8)}</h3>
                     <p className="text-sm text-gray-500">
-                      Created {new Date(order.createdAt).toLocaleDateString()} at{' '}
-                      {new Date(order.createdAt).toLocaleTimeString()}
+                      {new Date(order.createdAt).toLocaleDateString()} at{' '}
+                      {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`
-                    inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                    inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium
                     ${getStatusColor(order.status)}
                   `}>
+                    {getStatusIcon(order.status)}
                     {order.status.charAt(0) + order.status.slice(1).toLowerCase().replace('_', ' ')}
                   </span>
                   <Button variant="ghost" size="sm">
@@ -170,11 +307,11 @@ export default function OrdersPage() {
                     <User className="h-4 w-4 text-gray-400" />
                     Customer
                   </h4>
-                  <p className="text-sm font-medium text-gray-800">{order.customerName}</p>
-                  <p className="text-xs text-gray-500">{order.customerEmail}</p>
+                  <p className="text-sm font-medium text-gray-800">{order.user.name}</p>
+                  <p className="text-xs text-gray-500">{order.user.email}</p>
                   <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
                     <Phone className="h-3 w-3" />
-                    {order.customerPhone}
+                    {order.phoneNumber}
                   </p>
                 </div>
 
@@ -185,14 +322,25 @@ export default function OrdersPage() {
                     Order Details
                   </h4>
                   <p className="text-sm text-gray-700">{order.quantity}x {order.tankSize}</p>
-                  <p className="text-sm font-semibold text-gray-900">{order.totalPrice.toLocaleString()} IQD</p>
+                  <p className="text-sm font-semibold text-blue-600">{order.totalPrice.toLocaleString()} IQD</p>
                 </div>
 
                 {/* Driver Info */}
                 <div>
-                  <h4 className="text-sm font-medium text-gray-900 mb-2">Driver</h4>
-                  {order.driverName ? (
-                    <p className="text-sm text-gray-700">{order.driverName}</p>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
+                    <Truck className="h-4 w-4 text-gray-400" />
+                    Driver
+                  </h4>
+                  {order.driver ? (
+                    <>
+                      <p className="text-sm text-gray-700">{order.driver.user.name}</p>
+                      {order.driver.user.phoneNumber && (
+                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                          <Phone className="h-3 w-3" />
+                          {order.driver.user.phoneNumber}
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <p className="text-xs text-gray-500 italic">Not assigned</p>
                   )}
@@ -220,16 +368,73 @@ export default function OrdersPage() {
                 </div>
               </div>
 
+              {/* Action Buttons */}
               {order.status === 'PENDING' && (
                 <div className="flex items-center gap-2 mt-4 pt-4 border-t">
-                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                  <Button 
+                    size="sm" 
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={() => updateOrderStatus(order.id, 'CONFIRMED')}
+                  >
                     Confirm Order
                   </Button>
-                  <Button size="sm" variant="outline">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => updateOrderStatus(order.id, 'ASSIGNED')}
+                  >
                     Assign Driver
                   </Button>
-                  <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="text-red-600 hover:text-red-700"
+                    onClick={() => updateOrderStatus(order.id, 'CANCELLED')}
+                  >
                     Cancel Order
+                  </Button>
+                </div>
+              )}
+
+              {order.status === 'CONFIRMED' && (
+                <div className="flex items-center gap-2 mt-4 pt-4 border-t">
+                  <Button 
+                    size="sm" 
+                    className="bg-purple-600 hover:bg-purple-700"
+                    onClick={() => updateOrderStatus(order.id, 'ASSIGNED')}
+                  >
+                    Assign Driver
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => updateOrderStatus(order.id, 'IN_TRANSIT')}
+                  >
+                    Mark In Transit
+                  </Button>
+                </div>
+              )}
+
+              {order.status === 'ASSIGNED' && (
+                <div className="flex items-center gap-2 mt-4 pt-4 border-t">
+                  <Button 
+                    size="sm" 
+                    className="bg-orange-600 hover:bg-orange-700"
+                    onClick={() => updateOrderStatus(order.id, 'IN_TRANSIT')}
+                  >
+                    Mark In Transit
+                  </Button>
+                </div>
+              )}
+
+              {order.status === 'IN_TRANSIT' && (
+                <div className="flex items-center gap-2 mt-4 pt-4 border-t">
+                  <Button 
+                    size="sm" 
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={() => updateOrderStatus(order.id, 'DELIVERED')}
+                  >
+                    Mark as Delivered
                   </Button>
                 </div>
               )}

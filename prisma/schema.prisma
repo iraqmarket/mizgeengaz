@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,105 +8,105 @@ datasource db {
 }
 
 model User {
-  id               String       @id @default(cuid())
-  email            String       @unique
-  name             String?
-  password         String
-  phoneNumber      String?
-  addressType      AddressType?
-  address          String?
-  mapPinLat        Float?
-  mapPinLng        Float?
-  complexName      String?
-  buildingNumber   String?
-  floorNumber      String?
-  apartmentNumber  String?
-  city             String?
-  neighborhood     String?
-  businessName     String?
-  role             UserRole     @default(CUSTOMER)
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  orders           Order[]
-  driver           Driver?
+  id              String       @id @default(cuid())
+  email           String       @unique
+  name            String?
+  password        String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  address         String?
+  addressType     AddressType?
+  apartmentNumber String?
+  buildingNumber  String?
+  complexName     String?
+  floorNumber     String?
+  mapPinLat       Float?
+  mapPinLng       Float?
+  phoneNumber     String?
+  role            UserRole     @default(CUSTOMER)
+  businessName    String?
+  city            String?
+  neighborhood    String?
+  driver          Driver?
+  orders          Order[]
 
   @@map("users")
 }
 
 model Order {
-  id           String        @id @default(cuid())
-  userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  driverId     String?
-  driver       Driver?       @relation(fields: [driverId], references: [id])
-  zoneId       String?
-  zone         DeliveryZone? @relation("OrderDeliveryZone", fields: [zoneId], references: [id])
-  tankSize     String
-  quantity     Int
-  totalPrice   Float
+  id              String        @id @default(cuid())
+  userId          String
+  tankSize        String
+  quantity        Int
+  totalPrice      Float
   deliveryAddress String
-  phoneNumber  String
-  status       OrderStatus @default(PENDING)
-  scheduledAt  DateTime?
-  deliveredAt  DateTime?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  phoneNumber     String
+  status          OrderStatus   @default(PENDING)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deliveredAt     DateTime?
+  driverId        String?
+  scheduledAt     DateTime?
+  zoneId          String?
+  driver          Driver?       @relation(fields: [driverId], references: [id])
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone            DeliveryZone? @relation("OrderDeliveryZone", fields: [zoneId], references: [id])
 
   @@map("orders")
 }
 
 model Driver {
-  id           String       @id @default(cuid())
-  userId       String       @unique
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  licenseNumber String      @unique
+  id            String       @id @default(cuid())
+  userId        String       @unique
+  licenseNumber String       @unique
   vehicleType   String
-  vehiclePlate  String      @unique
+  vehiclePlate  String       @unique
   status        DriverStatus @default(AVAILABLE)
   currentLat    Float?
   currentLng    Float?
-  orders        Order[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders        Order[]
 
   @@map("drivers")
 }
 
 model Price {
-  id          String    @id @default(cuid())
-  type        String    @unique
+  id          String   @id @default(cuid())
   basePrice   Float
   deliveryFee Float
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  type        String   @unique
 
   @@map("prices")
 }
 
 model AppSettings {
-  id              String    @id @default(cuid())
+  id               String   @id @default(cuid())
   googleMapsApiKey String?
-  mapDefaultLat   Float?
-  mapDefaultLng   Float?
-  deliveryRadius  Int?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  mapDefaultLat    Float?
+  mapDefaultLng    Float?
+  deliveryRadius   Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("app_settings")
 }
 
 model DeliveryZone {
-  id          String    @id @default(cuid())
-  name        String    @unique
+  id          String   @id @default(cuid())
+  name        String   @unique
   color       String
-  coordinates Json      // Array of lat/lng points defining the polygon
-  isActive    Boolean   @default(true)
-  deliveryFee Float?    // Optional zone-specific delivery fee
+  coordinates Json
+  isActive    Boolean  @default(true)
+  deliveryFee Float?
   description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  orders      Order[]   @relation("OrderDeliveryZone")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]  @relation("OrderDeliveryZone")
 
   @@map("delivery_zones")
 }
@@ -132,10 +126,10 @@ enum AddressType {
 enum OrderStatus {
   PENDING
   CONFIRMED
-  ASSIGNED
   IN_TRANSIT
   DELIVERED
   CANCELLED
+  ASSIGNED
 }
 
 enum DriverStatus {
