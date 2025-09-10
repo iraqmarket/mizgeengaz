@@ -3,73 +3,58 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { 
-  Shield, 
-  Users, 
-  Car, 
-  DollarSign, 
+  Truck, 
+  Home, 
   Package, 
-  BarChart3, 
+  MapPin, 
+  User, 
   Settings, 
   Menu, 
   X,
   LogOut,
-  Home,
-  MapPin,
-  Map
+  Navigation,
+  Clock
 } from "lucide-react"
 
-interface AdminLayoutProps {
+interface DriverLayoutProps {
   children: React.ReactNode
 }
 
 const navigationItems = [
   {
-    href: "/admin",
+    href: "/driver",
     label: "Dashboard",
     icon: Home
   },
   {
-    href: "/admin/drivers",
-    label: "Drivers",
-    icon: Car
-  },
-  {
-    href: "/admin/prices",
-    label: "Pricing",
-    icon: DollarSign
-  },
-  {
-    href: "/admin/orders",
-    label: "Orders",
+    href: "/driver/orders",
+    label: "My Deliveries",
     icon: Package
   },
   {
-    href: "/admin/maps",
-    label: "Maps & Tracking",
+    href: "/driver/location",
+    label: "Location & Status",
     icon: MapPin
   },
   {
-    href: "/admin/zones",
-    label: "Delivery Zones",
-    icon: Map
+    href: "/driver/profile",
+    label: "My Profile",
+    icon: User
   },
   {
-    href: "/admin/analytics",
-    label: "Analytics",
-    icon: BarChart3
-  },
-  {
-    href: "/admin/settings",
+    href: "/driver/settings",
     label: "Settings",
     icon: Settings
   }
 ]
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
+export default function DriverLayout({ children }: DriverLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const { data: session } = useSession()
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -88,14 +73,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         lg:translate-x-0 lg:relative lg:flex
       `}>
         {/* Sidebar Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-orange-600 to-red-600">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-              <Shield className="h-6 w-6 text-white" />
+              <Truck className="h-6 w-6 text-white" />
             </div>
             <div>
               <span className="text-xl font-bold text-white">PropaneGo</span>
-              <p className="text-xs text-blue-100">Admin Dashboard</p>
+              <p className="text-xs text-orange-100">Driver Portal</p>
             </div>
           </div>
           <Button
@@ -122,14 +107,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     className={`
                       flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group
                       ${isActive 
-                        ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-200' 
+                        ? 'bg-orange-50 text-orange-700 shadow-sm border border-orange-200' 
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:shadow-sm'
                       }
                     `}
                     onClick={() => setSidebarOpen(false)}
                   >
                     <Icon className={`h-5 w-5 transition-colors ${
-                      isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+                      isActive ? 'text-orange-600' : 'text-gray-400 group-hover:text-gray-600'
                     }`} />
                     <span>{item.label}</span>
                   </Link>
@@ -143,6 +128,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <div className="p-4 border-t border-gray-200">
           <Button
             variant="ghost"
+            onClick={() => signOut()}
             className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl transition-all duration-200"
           >
             <LogOut className="h-4 w-4" />
@@ -165,23 +151,25 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <Menu className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">Admin Dashboard</h1>
-              <p className="text-xs text-gray-500 hidden sm:block">Manage your PropaneGo business</p>
+              <h1 className="text-xl font-semibold text-gray-900">Driver Dashboard</h1>
+              <p className="text-xs text-gray-500 hidden sm:block">Manage your deliveries and status</p>
             </div>
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-sm text-gray-600 font-medium">Online</span>
+            <div className="hidden sm:flex items-center gap-2 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-700 font-medium">Available</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
-                <span className="text-white font-medium text-sm">A</span>
+              <div className="w-8 h-8 bg-gradient-to-r from-orange-600 to-red-600 rounded-full flex items-center justify-center">
+                <span className="text-white font-medium text-sm">
+                  {session?.user?.name?.charAt(0)?.toUpperCase() || 'D'}
+                </span>
               </div>
               <div className="hidden md:block">
-                <p className="text-sm font-medium text-gray-900">Admin User</p>
-                <p className="text-xs text-gray-500">System Administrator</p>
+                <p className="text-sm font-medium text-gray-900">{session?.user?.name || 'Driver'}</p>
+                <p className="text-xs text-gray-500">Delivery Driver</p>
               </div>
             </div>
           </div>

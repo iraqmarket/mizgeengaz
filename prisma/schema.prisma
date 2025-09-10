@@ -27,6 +27,9 @@ model User {
   buildingNumber   String?
   floorNumber      String?
   apartmentNumber  String?
+  city             String?
+  neighborhood     String?
+  businessName     String?
   role             UserRole     @default(CUSTOMER)
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
@@ -37,11 +40,13 @@ model User {
 }
 
 model Order {
-  id           String      @id @default(cuid())
+  id           String        @id @default(cuid())
   userId       String
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   driverId     String?
-  driver       Driver?     @relation(fields: [driverId], references: [id])
+  driver       Driver?       @relation(fields: [driverId], references: [id])
+  zoneId       String?
+  zone         DeliveryZone? @relation("OrderDeliveryZone", fields: [zoneId], references: [id])
   tankSize     String
   quantity     Int
   totalPrice   Float
@@ -83,6 +88,33 @@ model Price {
   updatedAt   DateTime  @updatedAt
 
   @@map("prices")
+}
+
+model AppSettings {
+  id              String    @id @default(cuid())
+  googleMapsApiKey String?
+  mapDefaultLat   Float?
+  mapDefaultLng   Float?
+  deliveryRadius  Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("app_settings")
+}
+
+model DeliveryZone {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  color       String
+  coordinates Json      // Array of lat/lng points defining the polygon
+  isActive    Boolean   @default(true)
+  deliveryFee Float?    // Optional zone-specific delivery fee
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  orders      Order[]   @relation("OrderDeliveryZone")
+
+  @@map("delivery_zones")
 }
 
 enum UserRole {

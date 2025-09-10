@@ -15,7 +15,8 @@ import {
   Loader2,
   CheckCircle,
   Navigation,
-  Home
+  Home,
+  X
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -50,7 +51,21 @@ export default function ProfilePage() {
         if (response.ok) {
           const data = await response.json()
           if (data.success && data.user) {
-            setProfile(data.user)
+            // Set profile with clean data, ensuring empty values are handled properly
+            setProfile({
+              id: data.user.id,
+              name: data.user.name || '',
+              email: data.user.email,
+              phoneNumber: data.user.phoneNumber || '',
+              addressType: data.user.addressType || 'HOME',
+              address: data.user.address || '', // This should be the clean address from API
+              mapPinLat: data.user.mapPinLat || undefined,
+              mapPinLng: data.user.mapPinLng || undefined,
+              complexName: data.user.complexName || '',
+              buildingNumber: data.user.buildingNumber || '',
+              floorNumber: data.user.floorNumber || '',
+              apartmentNumber: data.user.apartmentNumber || ''
+            })
           }
         } else {
           toast.error('Failed to load profile')
@@ -88,10 +103,10 @@ export default function ProfilePage() {
           
           if (response.ok) {
             const data = await response.json()
-            const address = data.display_name || `${latitude}, ${longitude}`
+            const newAddress = data.display_name || `${latitude}, ${longitude}`
             setProfile(prev => prev ? {
               ...prev,
-              address,
+              address: newAddress, // Replace the entire address with the new one
               mapPinLat: latitude,
               mapPinLng: longitude
             } : null)
@@ -101,7 +116,7 @@ export default function ProfilePage() {
           console.error('Reverse geocoding failed:', error)
           setProfile(prev => prev ? {
             ...prev,
-            address: `${latitude}, ${longitude}`,
+            address: `${latitude}, ${longitude}`, // Replace with coordinates if geocoding fails
             mapPinLat: latitude,
             mapPinLng: longitude
           } : null)
@@ -120,6 +135,8 @@ export default function ProfilePage() {
   const handleSave = async () => {
     if (!profile) return
 
+    console.log('Saving profile data:', profile) // Debug logging
+
     try {
       setSaving(true)
       const response = await fetch('/api/user/profile', {
@@ -131,7 +148,26 @@ export default function ProfilePage() {
       })
 
       if (response.ok) {
+        const data = await response.json()
         toast.success('Profile updated successfully!')
+        
+        // Completely replace the profile state with fresh data from API
+        if (data.success && data.user) {
+          setProfile({
+            id: data.user.id,
+            name: data.user.name || '',
+            email: data.user.email,
+            phoneNumber: data.user.phoneNumber || '',
+            addressType: data.user.addressType || 'HOME',
+            address: data.user.address || '', // Fresh address from database
+            mapPinLat: data.user.mapPinLat,
+            mapPinLng: data.user.mapPinLng,
+            complexName: data.user.complexName || '',
+            buildingNumber: data.user.buildingNumber || '',
+            floorNumber: data.user.floorNumber || '',
+            apartmentNumber: data.user.apartmentNumber || ''
+          })
+        }
       } else {
         const error = await response.json()
         toast.error(error.error || 'Failed to update profile')
@@ -243,21 +279,36 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label htmlFor="address">Street Address</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={getCurrentLocation}
-                    disabled={isLoadingLocation}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    {isLoadingLocation ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Navigation className="h-4 w-4" />
-                    )}
-                    {isLoadingLocation ? 'Getting Location...' : 'Use Current Location'}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setProfile(prev => prev ? {...prev, address: ''} : null)
+                        toast.info('Address field cleared')
+                      }}
+                      className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700"
+                    >
+                      <X className="h-4 w-4" />
+                      Clear
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={getCurrentLocation}
+                      disabled={isLoadingLocation}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      {isLoadingLocation ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Navigation className="h-4 w-4" />
+                      )}
+                      {isLoadingLocation ? 'Getting Location...' : 'Use GPS Location'}
+                    </Button>
+                  </div>
                 </div>
                 <Input
                   id="address"

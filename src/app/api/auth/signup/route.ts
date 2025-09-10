@@ -18,7 +18,10 @@ export async function POST(request: NextRequest) {
       complexName,
       buildingNumber,
       floorNumber,
-      apartmentNumber
+      apartmentNumber,
+      city,
+      neighborhood,
+      businessName
     } = await request.json()
 
     if (!email || !password || !name) {
@@ -58,6 +61,9 @@ export async function POST(request: NextRequest) {
         buildingNumber,
         floorNumber,
         apartmentNumber,
+        city,
+        neighborhood,
+        businessName,
       },
     })
 

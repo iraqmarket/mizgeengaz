@@ -1,14 +1,15 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Truck, MapPin, Navigation, Loader2, ChevronRight, ChevronLeft, Check, User, Mail, Lock, Phone, Home } from "lucide-react"
+import { Truck, MapPin, Navigation, Loader2, ChevronRight, ChevronLeft, Check, User, Mail, Lock, Phone, Home, Building2 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import GoogleMap from "@/components/GoogleMap"
 
 type AddressType = 'HOME' | 'BUSINESS' | 'APARTMENT'
 
@@ -27,6 +28,16 @@ export default function SignUp() {
   const [buildingNumber, setBuildingNumber] = useState("")
   const [floorNumber, setFloorNumber] = useState("")
   const [apartmentNumber, setApartmentNumber] = useState("")
+  const [city, setCity] = useState("")
+  const [neighborhood, setNeighborhood] = useState("")
+  const [businessName, setBusinessName] = useState("")
+  const [showMapPicker, setShowMapPicker] = useState(false)
+  const [googleMapsApiKey, setGoogleMapsApiKey] = useState("")
+  const [mapDefaultLat, setMapDefaultLat] = useState(33.3152)
+  const [mapDefaultLng, setMapDefaultLng] = useState(44.3661)
+  const [userLocationLat, setUserLocationLat] = useState<number | null>(null)
+  const [userLocationLng, setUserLocationLng] = useState<number | null>(null)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
   
   // UI state
   const [currentStep, setCurrentStep] = useState(1)
@@ -36,6 +47,131 @@ export default function SignUp() {
   
   const router = useRouter()
   const totalSteps = 3
+
+  // Get user's current location for map centering
+  const getUserLocation = async (showFeedback = false) => {
+    if (!navigator.geolocation) {
+      if (showFeedback) {
+        toast.error('Geolocation is not supported by this browser')
+      }
+      return false
+    }
+
+    if (showFeedback) {
+      setIsGettingLocation(true)
+    }
+
+    return new Promise<boolean>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords
+          setUserLocationLat(latitude)
+          setUserLocationLng(longitude)
+          
+          if (showFeedback) {
+            // Also update the map pin coordinates
+            setMapPinLat(latitude.toString())
+            setMapPinLng(longitude.toString())
+            
+            // Try reverse geocoding to get address
+            try {
+              const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
+              )
+              
+              if (response.ok) {
+                const data = await response.json()
+                if (data.address) {
+                  setCity(data.address.city || data.address.town || data.address.village || '')
+                  setNeighborhood(data.address.suburb || data.address.neighbourhood || '')
+                  setAddress(data.display_name || `${latitude}, ${longitude}`)
+                }
+              } else {
+                setAddress(`${latitude}, ${longitude}`)
+              }
+            } catch (error) {
+              console.error('Reverse geocoding failed:', error)
+              setAddress(`${latitude}, ${longitude}`)
+            }
+            
+            toast.success('Location detected successfully!')
+          }
+          
+          setIsGettingLocation(false)
+          resolve(true)
+        },
+        (error) => {
+          console.log('Geolocation failed:', error)
+          setIsGettingLocation(false)
+          
+          if (showFeedback) {
+            let errorMessage = 'Failed to get your location. '
+            switch (error.code) {
+              case error.PERMISSION_DENIED:
+                errorMessage += 'Location access was denied. Please enable location access and try again.'
+                break
+              case error.POSITION_UNAVAILABLE:
+                errorMessage += 'Location information is unavailable.'
+                break
+              case error.TIMEOUT:
+                errorMessage += 'Location request timed out.'
+                break
+              default:
+                errorMessage += 'An unknown error occurred.'
+                break
+            }
+            toast.error(errorMessage)
+          }
+          
+          resolve(false)
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 300000 // 5 minutes cache
+        }
+      )
+    })
+  }
+
+  // Fetch app settings and user location on component mount
+  useEffect(() => {
+    const initialize = async () => {
+      // Fetch settings
+      try {
+        const response = await fetch('/api/settings')
+        if (response.ok) {
+          const settings = await response.json()
+          setGoogleMapsApiKey(settings.googleMapsApiKey || '')
+          setMapDefaultLat(settings.mapDefaultLat || 33.3152)
+          setMapDefaultLng(settings.mapDefaultLng || 44.3661)
+        }
+      } catch (error) {
+        console.error('Failed to fetch settings:', error)
+      }
+
+      // Try to get user location for map centering
+      await getUserLocation()
+    }
+    
+    initialize()
+  }, [])
+
+  // Get the best available center coordinates for the map
+  const getMapCenter = () => {
+    // If user has selected a specific location, use that
+    if (mapPinLat && mapPinLng) {
+      return { lat: parseFloat(mapPinLat), lng: parseFloat(mapPinLng) }
+    }
+    
+    // If we have user's current location, use that
+    if (userLocationLat !== null && userLocationLng !== null) {
+      return { lat: userLocationLat, lng: userLocationLng }
+    }
+    
+    // Fall back to admin settings
+    return { lat: mapDefaultLat, lng: mapDefaultLng }
+  }
 
   const steps = [
     { 
@@ -203,6 +339,9 @@ export default function SignUp() {
           buildingNumber: buildingNumber || undefined,
           floorNumber: floorNumber || undefined,
           apartmentNumber: apartmentNumber || undefined,
+          city: city || undefined,
+          neighborhood: neighborhood || undefined,
+          businessName: businessName || undefined,
         }),
       })
 
@@ -479,6 +618,211 @@ export default function SignUp() {
           </div>
         </div>
 
+        {/* City and Neighborhood for HOME address type */}
+        {addressType === 'HOME' && (
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-lg border border-green-200">
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Home className="w-4 h-4 text-green-600" />
+              Home Address Details
+            </h4>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    type="text"
+                    placeholder="Enter your city"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="mt-1 bg-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="neighborhood">Neighborhood</Label>
+                  <Input
+                    id="neighborhood"
+                    type="text"
+                    placeholder="Enter your neighborhood"
+                    value={neighborhood}
+                    onChange={(e) => setNeighborhood(e.target.value)}
+                    className="mt-1 bg-white"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowMapPicker(!showMapPicker)}
+                  className="flex items-center gap-2"
+                >
+                  <MapPin className="w-4 h-4" />
+                  {showMapPicker ? 'Hide Map' : 'Pick Location on Map'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => getUserLocation(true)}
+                  disabled={isGettingLocation}
+                  className="flex items-center gap-2"
+                >
+                  {isGettingLocation ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Navigation className="w-4 h-4" />
+                  )}
+                  {isGettingLocation ? 'Detecting...' : 'Use My Location'}
+                </Button>
+              </div>
+              {showMapPicker && googleMapsApiKey && (
+                <div className="mt-4">
+                  <GoogleMap
+                    apiKey={googleMapsApiKey}
+                    center={getMapCenter()}
+                    zoom={15}
+                    height="300px"
+                    onMapReady={(map) => {
+                      map.addListener('click', (event: any) => {
+                        const lat = event.latLng.lat()
+                        const lng = event.latLng.lng()
+                        setMapPinLat(lat.toString())
+                        setMapPinLng(lng.toString())
+                        
+                        // Reverse geocoding
+                        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+                          .then(response => response.json())
+                          .then(data => {
+                            if (data.address) {
+                              setCity(data.address.city || data.address.town || data.address.village || '')
+                              setNeighborhood(data.address.suburb || data.address.neighbourhood || '')
+                              setAddress(data.display_name || `${lat}, ${lng}`)
+                            }
+                          })
+                          .catch(() => {
+                            setAddress(`${lat}, ${lng}`)
+                          })
+                      })
+                    }}
+                    markers={mapPinLat && mapPinLng ? [{
+                      id: 'home-location',
+                      position: { lat: parseFloat(mapPinLat), lng: parseFloat(mapPinLng) },
+                      title: 'Home Location',
+                      type: 'customer'
+                    }] : []}
+                  />
+                  <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                    <p className="text-xs text-blue-800">
+                      💡 <strong>How to use:</strong> Click anywhere on the map to pin your exact location, or use "Use My Location" button to auto-detect your current position.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {showMapPicker && !googleMapsApiKey && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-yellow-800 text-sm">
+                    Google Maps API key not configured. Please ask an administrator to configure the Google Maps API key in the admin settings.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Business Name for BUSINESS address type */}
+        {addressType === 'BUSINESS' && (
+          <div className="bg-gradient-to-br from-orange-50 to-yellow-50 p-6 rounded-lg border border-orange-200">
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-orange-600" />
+              Business Details
+            </h4>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="businessName">Business Name</Label>
+                <Input
+                  id="businessName"
+                  type="text"
+                  placeholder="Enter your business name"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  className="mt-1 bg-white"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowMapPicker(!showMapPicker)}
+                  className="flex items-center gap-2"
+                >
+                  <MapPin className="w-4 h-4" />
+                  {showMapPicker ? 'Hide Map' : 'Pin Business Location'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => getUserLocation(true)}
+                  disabled={isGettingLocation}
+                  className="flex items-center gap-2"
+                >
+                  {isGettingLocation ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Navigation className="w-4 h-4" />
+                  )}
+                  {isGettingLocation ? 'Detecting...' : 'Use My Location'}
+                </Button>
+              </div>
+              {showMapPicker && googleMapsApiKey && (
+                <div className="mt-4">
+                  <GoogleMap
+                    apiKey={googleMapsApiKey}
+                    center={getMapCenter()}
+                    zoom={15}
+                    height="300px"
+                    onMapReady={(map) => {
+                      map.addListener('click', (event: any) => {
+                        const lat = event.latLng.lat()
+                        const lng = event.latLng.lng()
+                        setMapPinLat(lat.toString())
+                        setMapPinLng(lng.toString())
+                        
+                        // Reverse geocoding
+                        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+                          .then(response => response.json())
+                          .then(data => {
+                            setAddress(data.display_name || `${lat}, ${lng}`)
+                          })
+                          .catch(() => {
+                            setAddress(`${lat}, ${lng}`)
+                          })
+                      })
+                    }}
+                    markers={mapPinLat && mapPinLng ? [{
+                      id: 'business-location',
+                      position: { lat: parseFloat(mapPinLat), lng: parseFloat(mapPinLng) },
+                      title: businessName || 'Business Location',
+                      type: 'delivery'
+                    }] : []}
+                  />
+                  <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                    <p className="text-xs text-blue-800">
+                      💡 <strong>How to use:</strong> Click anywhere on the map to pin your business location, or use "Use My Location" button to auto-detect your current position.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {showMapPicker && !googleMapsApiKey && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-yellow-800 text-sm">
+                    Google Maps API key not configured. Please ask an administrator to configure the Google Maps API key in the admin settings.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {addressType === 'APARTMENT' && (
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
             <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -569,6 +913,23 @@ export default function SignUp() {
             <p><span className="font-medium">Phone:</span> {phoneNumber || 'Not provided'}</p>
             <p><span className="font-medium">Address Type:</span> {addressType}</p>
             <p><span className="font-medium">Address:</span> {address || 'Not provided'}</p>
+            {addressType === 'HOME' && (city || neighborhood) && (
+              <div className="mt-3 p-3 bg-white rounded border">
+                <p className="font-medium mb-2">Home Details:</p>
+                <div className="space-y-1 text-xs">
+                  {city && <p>City: {city}</p>}
+                  {neighborhood && <p>Neighborhood: {neighborhood}</p>}
+                </div>
+              </div>
+            )}
+            {addressType === 'BUSINESS' && businessName && (
+              <div className="mt-3 p-3 bg-white rounded border">
+                <p className="font-medium mb-2">Business Details:</p>
+                <div className="space-y-1 text-xs">
+                  <p>Business Name: {businessName}</p>
+                </div>
+              </div>
+            )}
             {addressType === 'APARTMENT' && (
               <div className="mt-3 p-3 bg-white rounded border">
                 <p className="font-medium mb-2">Apartment Details:</p>
