@@ -31,6 +31,9 @@ interface DriverOrder {
     name?: string
     email: string
     phoneNumber?: string
+    mapPinLat?: number
+    mapPinLng?: number
+    address?: string
   }
   tankSize: string
   quantity: number
@@ -188,6 +191,61 @@ export default function DriverOrders() {
     } catch (error) {
       console.error('Error accepting order:', error)
       toast.error('Failed to accept order')
+    }
+  }
+
+  const handleGetDirections = (order: DriverOrder) => {
+    console.log('🗺️ [Driver] Opening Waze directions for order:', order.id)
+    console.log('   - Customer:', order.user.name)
+    console.log('   - Delivery address:', order.deliveryAddress)
+    console.log('   - Coordinates:', order.user.mapPinLat, order.user.mapPinLng)
+
+    // Check if we have customer coordinates
+    if (order.user.mapPinLat && order.user.mapPinLng) {
+      // Use precise coordinates for navigation
+      const wazeUrl = `https://waze.com/ul?ll=${order.user.mapPinLat},${order.user.mapPinLng}&navigate=yes`
+      console.log('📍 [Driver] Opening Waze with coordinates:', wazeUrl)
+
+      // Try to open Waze app, fallback to web if app not installed
+      const wazeAppUrl = `waze://?ll=${order.user.mapPinLat},${order.user.mapPinLng}&navigate=yes`
+
+      // First try to open the app
+      window.location.href = wazeAppUrl
+
+      // Fallback to web version after a short delay if app doesn't open
+      setTimeout(() => {
+        window.open(wazeUrl, '_blank')
+        toast.success('Opening navigation in Waze...')
+      }, 1500)
+
+    } else if (order.deliveryAddress) {
+      // Fallback to address search if no coordinates
+      const encodedAddress = encodeURIComponent(order.deliveryAddress)
+      const wazeUrl = `https://waze.com/ul?q=${encodedAddress}&navigate=yes`
+      console.log('📍 [Driver] Opening Waze with address search:', wazeUrl)
+
+      const wazeAppUrl = `waze://?q=${encodedAddress}&navigate=yes`
+
+      window.location.href = wazeAppUrl
+      setTimeout(() => {
+        window.open(wazeUrl, '_blank')
+        toast.success('Opening navigation in Waze...')
+      }, 1500)
+
+    } else {
+      console.error('❌ [Driver] No location data available for navigation')
+      toast.error('No location data available for this order')
+    }
+  }
+
+  const handleCallCustomer = (order: DriverOrder) => {
+    const phoneNumber = order.phoneNumber || order.user.phoneNumber
+    if (phoneNumber) {
+      console.log('📞 [Driver] Calling customer:', phoneNumber)
+      window.location.href = `tel:${phoneNumber}`
+      toast.success('Opening phone app...')
+    } else {
+      toast.error('Customer phone number not available')
     }
   }
 
@@ -394,14 +452,24 @@ export default function DriverOrders() {
                   {/* Order Actions */}
                   <div className="flex items-center gap-2 pt-4 border-t">
                     {(['PENDING', 'CONFIRMED'].includes(order.status) && !order.driverId) && (
-                      <Button
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => handleAcceptOrder(order.id)}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Accept Order
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => handleAcceptOrder(order.id)}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Accept Order
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleGetDirections(order)}
+                        >
+                          <Navigation className="h-4 w-4 mr-1" />
+                          Preview Route
+                        </Button>
+                      </>
                     )}
 
                     {order.status === 'ASSIGNED' && (
@@ -414,11 +482,19 @@ export default function DriverOrders() {
                           <Play className="h-4 w-4 mr-1" />
                           Start Delivery
                         </Button>
-                        <Button size="sm" variant="outline">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleGetDirections(order)}
+                        >
                           <Navigation className="h-4 w-4 mr-1" />
                           Get Directions
                         </Button>
-                        <Button size="sm" variant="outline">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCallCustomer(order)}
+                        >
                           <Phone className="h-4 w-4 mr-1" />
                           Call Customer
                         </Button>
@@ -435,11 +511,19 @@ export default function DriverOrders() {
                           <CheckCircle className="h-4 w-4 mr-1" />
                           Mark Delivered
                         </Button>
-                        <Button size="sm" variant="outline">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleGetDirections(order)}
+                        >
                           <Navigation className="h-4 w-4 mr-1" />
-                          Update Location
+                          Get Directions
                         </Button>
-                        <Button size="sm" variant="outline">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCallCustomer(order)}
+                        >
                           <Phone className="h-4 w-4 mr-1" />
                           Call Customer
                         </Button>

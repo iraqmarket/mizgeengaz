@@ -50,17 +50,18 @@ export async function GET() {
 
     console.log('🔍 [Driver Orders] Searching for orders in zone:', user.driver.assignedZoneId)
 
-    // Get orders from the driver's assigned zone that are available for pickup
+    // Get orders from the driver's assigned zone
     const orders = await prisma.order.findMany({
       where: {
         zoneId: user.driver.assignedZoneId,
-        status: {
-          in: ['PENDING', 'CONFIRMED', 'ASSIGNED', 'IN_TRANSIT']
-        },
-        // Show orders assigned to this driver or unassigned orders in their zone
         OR: [
+          // Orders assigned to this driver (any status including delivered)
           { driverId: user.driver.id },
-          { driverId: null, status: { in: ['PENDING', 'CONFIRMED'] } }
+          // Unassigned orders in their zone that are available for pickup
+          {
+            driverId: null,
+            status: { in: ['PENDING', 'CONFIRMED'] }
+          }
         ]
       },
       include: {
@@ -70,6 +71,9 @@ export async function GET() {
             name: true,
             email: true,
             phoneNumber: true,
+            mapPinLat: true,
+            mapPinLng: true,
+            address: true
           }
         },
         zone: {
@@ -94,8 +98,16 @@ export async function GET() {
       zoneId: o.zoneId,
       zoneName: o.zone?.name,
       driverId: o.driverId,
-      customerName: o.user.name
+      customerName: o.user.name,
+      deliveredAt: o.deliveredAt
     })))
+
+    // Specifically log delivered orders for debugging
+    const deliveredOrders = orders.filter(o => o.status === 'DELIVERED')
+    console.log('📦 [Driver Orders] Delivered orders:', deliveredOrders.length)
+    if (deliveredOrders.length > 0) {
+      console.log('   - Delivered order IDs:', deliveredOrders.map(o => o.id))
+    }
 
     return NextResponse.json({ orders })
   } catch (error) {
