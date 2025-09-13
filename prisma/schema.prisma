@@ -56,18 +56,21 @@ model Order {
 }
 
 model Driver {
-  id            String       @id @default(cuid())
-  userId        String       @unique
-  licenseNumber String       @unique
+  id            String        @id @default(cuid())
+  userId        String        @unique
+  licenseNumber String        @unique
   vehicleType   String
-  vehiclePlate  String       @unique
-  status        DriverStatus @default(AVAILABLE)
+  vehiclePlate  String        @unique
+  status        DriverStatus  @default(AVAILABLE)
   currentLat    Float?
   currentLng    Float?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileImage  String?
+  assignedZoneId String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders        Order[]
+  assignedZone  DeliveryZone? @relation("DriverAssignedZone", fields: [assignedZoneId], references: [id])
 
   @@map("drivers")
 }
@@ -97,16 +100,17 @@ model AppSettings {
 }
 
 model DeliveryZone {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  color       String
-  coordinates Json
-  isActive    Boolean  @default(true)
-  deliveryFee Float?
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  orders      Order[]  @relation("OrderDeliveryZone")
+  id            String   @id @default(cuid())
+  name          String   @unique
+  color         String
+  coordinates   Json
+  isActive      Boolean  @default(true)
+  deliveryFee   Float?
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  orders        Order[]  @relation("OrderDeliveryZone")
+  assignedDrivers Driver[] @relation("DriverAssignedZone")
 
   @@map("delivery_zones")
 }

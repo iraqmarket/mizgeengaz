@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
@@ -18,6 +18,17 @@ import {
   Navigation,
   Clock
 } from "lucide-react"
+
+interface DriverProfile {
+  user: {
+    id: string
+    name: string
+    email: string
+    phoneNumber?: string
+  }
+  profileImage?: string
+  status: string
+}
 
 interface DriverLayoutProps {
   children: React.ReactNode
@@ -53,8 +64,36 @@ const navigationItems = [
 
 export default function DriverLayout({ children }: DriverLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(true)
   const pathname = usePathname()
   const { data: session } = useSession()
+
+  // Fetch driver profile data
+  useEffect(() => {
+    const fetchDriverProfile = async () => {
+      if (!session?.user?.email) {
+        setProfileLoading(false)
+        return
+      }
+
+      try {
+        const response = await fetch('/api/driver/profile')
+        if (response.ok) {
+          const data = await response.json()
+          setDriverProfile(data.driver)
+        } else {
+          console.error('Failed to fetch driver profile')
+        }
+      } catch (error) {
+        console.error('Error fetching driver profile:', error)
+      } finally {
+        setProfileLoading(false)
+      }
+    }
+
+    fetchDriverProfile()
+  }, [session])
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -162,13 +201,25 @@ export default function DriverLayout({ children }: DriverLayoutProps) {
               <span className="text-sm text-green-700 font-medium">Available</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-orange-600 to-red-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-medium text-sm">
-                  {session?.user?.name?.charAt(0)?.toUpperCase() || 'D'}
-                </span>
+              <div className="w-8 h-8 bg-gradient-to-r from-orange-600 to-red-600 rounded-full flex items-center justify-center overflow-hidden">
+                {profileLoading ? (
+                  <div className="w-full h-full bg-gray-200 animate-pulse rounded-full"></div>
+                ) : driverProfile?.profileImage ? (
+                  <img
+                    src={driverProfile.profileImage}
+                    alt={driverProfile.user.name || 'Driver'}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-white font-medium text-sm">
+                    {session?.user?.name?.charAt(0)?.toUpperCase() || 'D'}
+                  </span>
+                )}
               </div>
               <div className="hidden md:block">
-                <p className="text-sm font-medium text-gray-900">{session?.user?.name || 'Driver'}</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {driverProfile?.user?.name || session?.user?.name || 'Driver'}
+                </p>
                 <p className="text-xs text-gray-500">Delivery Driver</p>
               </div>
             </div>

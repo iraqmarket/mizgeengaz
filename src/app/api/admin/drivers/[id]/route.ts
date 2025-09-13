@@ -2,16 +2,17 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
 interface Params {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 // GET /api/admin/drivers/[id] - Get specific driver
 export async function GET(request: NextRequest, { params }: Params) {
   try {
+    const { id } = await params
     const driver = await prisma.driver.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         user: {
           select: {
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 // PUT /api/admin/drivers/[id] - Update driver
 export async function PUT(request: NextRequest, { params }: Params) {
   try {
+    const { id } = await params
     const body = await request.json()
     const { 
       name, 
@@ -62,28 +64,51 @@ export async function PUT(request: NextRequest, { params }: Params) {
       licenseNumber, 
       vehicleType, 
       vehiclePlate,
-      status 
+      status,
+      profileImage,
+      assignedZoneId 
     } = body
 
-    // Update user information
-    await prisma.user.update({
-      where: { id: params.id },
-      data: {
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(phoneNumber && { phoneNumber }),
-      }
+    // First get the driver to get the userId
+    const existingDriver = await prisma.driver.findUnique({
+      where: { id },
+      include: { user: true }
     })
+
+    if (!existingDriver) {
+      return NextResponse.json(
+        { error: "Driver not found" },
+        { status: 404 }
+      )
+    }
+
+    // Prepare update data for user
+    const userUpdateData: any = {}
+    if (name) userUpdateData.name = name
+    if (email) userUpdateData.email = email
+    if (phoneNumber !== undefined) userUpdateData.phoneNumber = phoneNumber
+
+    // Update user information if there's data to update
+    if (Object.keys(userUpdateData).length > 0) {
+      await prisma.user.update({
+        where: { id: existingDriver.userId },
+        data: userUpdateData
+      })
+    }
+
+    // Prepare update data for driver
+    const driverUpdateData: any = {}
+    if (licenseNumber) driverUpdateData.licenseNumber = licenseNumber
+    if (vehicleType) driverUpdateData.vehicleType = vehicleType
+    if (vehiclePlate) driverUpdateData.vehiclePlate = vehiclePlate
+    if (status) driverUpdateData.status = status
+    if (profileImage !== undefined) driverUpdateData.profileImage = profileImage
+    if (assignedZoneId !== undefined) driverUpdateData.assignedZoneId = assignedZoneId
 
     // Update driver information
     const driver = await prisma.driver.update({
-      where: { id: params.id },
-      data: {
-        ...(licenseNumber && { licenseNumber }),
-        ...(vehicleType && { vehicleType }),
-        ...(vehiclePlate && { vehiclePlate }),
-        ...(status && { status }),
-      },
+      where: { id },
+      data: driverUpdateData,
       include: {
         user: {
           select: {
@@ -91,6 +116,14 @@ export async function PUT(request: NextRequest, { params }: Params) {
             name: true,
             email: true,
             phoneNumber: true,
+          }
+        },
+        assignedZone: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            description: true,
           }
         }
       }
@@ -117,9 +150,28 @@ export async function PUT(request: NextRequest, { params }: Params) {
 // DELETE /api/admin/drivers/[id] - Delete driver
 export async function DELETE(request: NextRequest, { params }: Params) {
   try {
-    // Delete driver (this will cascade delete the user due to foreign key constraint)
+    const { id } = await params
+    // First get the driver to get the userId
+    const existingDriver = await prisma.driver.findUnique({
+      where: { id },
+      include: { user: true }
+    })
+
+    if (!existingDriver) {
+      return NextResponse.json(
+        { error: "Driver not found" },
+        { status: 404 }
+      )
+    }
+
+    // Delete driver first (this might have foreign key constraints)
     await prisma.driver.delete({
-      where: { id: params.id }
+      where: { id }
+    })
+
+    // Then delete the associated user
+    await prisma.user.delete({
+      where: { id: existingDriver.userId }
     })
 
     return NextResponse.json({ message: "Driver deleted successfully" })

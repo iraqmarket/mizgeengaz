@@ -19,7 +19,18 @@ export async function GET() {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: {
-        driver: true
+        driver: {
+          include: {
+            assignedZone: {
+              select: {
+                id: true,
+                name: true,
+                color: true,
+                description: true,
+              }
+            }
+          }
+        }
       }
     })
 
@@ -41,6 +52,8 @@ export async function GET() {
       vehicleType: user.driver.vehicleType,
       vehiclePlate: user.driver.vehiclePlate,
       status: user.driver.status,
+      profileImage: user.driver.profileImage,
+      assignedZone: user.driver.assignedZone,
       createdAt: user.driver.createdAt
     }
 
@@ -73,7 +86,18 @@ export async function PUT(request: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: {
-        driver: true
+        driver: {
+          include: {
+            assignedZone: {
+              select: {
+                id: true,
+                name: true,
+                color: true,
+                description: true,
+              }
+            }
+          }
+        }
       }
     })
 
@@ -111,6 +135,14 @@ export async function PUT(request: NextRequest) {
             email: true,
             phoneNumber: true,
           }
+        },
+        assignedZone: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            description: true,
+          }
         }
       }
     })
@@ -122,6 +154,8 @@ export async function PUT(request: NextRequest) {
         vehicleType: updatedDriver.vehicleType,
         vehiclePlate: updatedDriver.vehiclePlate,
         status: updatedDriver.status,
+        profileImage: updatedDriver.profileImage,
+        assignedZone: updatedDriver.assignedZone,
         createdAt: updatedDriver.createdAt
       }
     })

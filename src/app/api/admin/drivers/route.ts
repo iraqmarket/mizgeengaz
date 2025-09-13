@@ -20,6 +20,14 @@ export async function GET() {
             id: true,
             status: true,
           }
+        },
+        assignedZone: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            description: true,
+          }
         }
       }
     })
@@ -45,7 +53,9 @@ export async function POST(request: NextRequest) {
       phoneNumber, 
       licenseNumber, 
       vehicleType, 
-      vehiclePlate 
+      vehiclePlate,
+      profileImage,
+      assignedZoneId 
     } = body
 
     // Validate required fields
@@ -120,7 +130,9 @@ export async function POST(request: NextRequest) {
         licenseNumber,
         vehicleType,
         vehiclePlate,
-        status: 'OFFLINE'
+        status: 'OFFLINE',
+        profileImage: profileImage || null,
+        assignedZoneId: assignedZoneId || null
       },
       include: {
         user: {

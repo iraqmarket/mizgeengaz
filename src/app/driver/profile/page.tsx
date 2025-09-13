@@ -15,7 +15,8 @@ import {
   Loader2,
   CheckCircle,
   IdCard,
-  Car
+  Car,
+  MapPin
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -30,6 +31,12 @@ interface DriverProfile {
   vehicleType: string
   vehiclePlate: string
   status: 'AVAILABLE' | 'BUSY' | 'OFFLINE'
+  assignedZone?: {
+    id: string
+    name: string
+    color: string
+    description?: string
+  }
   createdAt: string
 }
 
@@ -227,6 +234,56 @@ export default function DriverProfile() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Zone Assignment Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-green-600" />
+                Zone Assignment
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {profile.assignedZone ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border">
+                    <div 
+                      className="w-6 h-6 rounded-full border-2 border-gray-300 flex-shrink-0"
+                      style={{ backgroundColor: profile.assignedZone.color }}
+                    ></div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-gray-900">{profile.assignedZone.name}</h4>
+                      </div>
+                      {profile.assignedZone.description && (
+                        <p className="text-sm text-gray-600 mt-1">{profile.assignedZone.description}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-blue-800">
+                      <strong>Note:</strong> You will only receive delivery orders from your assigned zone. 
+                      If you need to change your zone assignment, please contact your administrator.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <h4 className="font-medium text-gray-900 mb-2">No Zone Assigned</h4>
+                  <p className="text-sm text-gray-500 mb-4">
+                    You are not currently assigned to any delivery zone. 
+                    You may receive orders from all available areas.
+                  </p>
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                    <p className="text-sm text-orange-800">
+                      Contact your administrator if you need to be assigned to a specific zone.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Profile Summary */}
@@ -264,6 +321,12 @@ export default function DriverProfile() {
                     {formData.vehicleType && formData.vehiclePlate ? '✓' : '✗'}
                   </span>
                 </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Zone:</span>
+                  <span className={profile?.assignedZone ? 'text-green-600' : 'text-orange-500'}>
+                    {profile?.assignedZone ? '✓' : '⚠'}
+                  </span>
+                </div>
               </div>
 
               <div className="pt-3 border-t">
@@ -276,6 +339,24 @@ export default function DriverProfile() {
                     {new Date(profile.createdAt).toLocaleDateString('en-GB')}
                   </p>
                 </div>
+
+                {profile?.assignedZone && (
+                  <div className="mb-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex items-center gap-2 text-sm text-green-800">
+                      <MapPin className="h-4 w-4" />
+                      <span className="font-medium">Current Zone:</span>
+                    </div>
+                    <div className="flex items-center gap-2 ml-6">
+                      <div 
+                        className="w-3 h-3 rounded-full border border-green-300"
+                        style={{ backgroundColor: profile.assignedZone.color }}
+                      ></div>
+                      <p className="text-sm text-green-700">
+                        {profile.assignedZone.name}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 
                 <Button 
                   className="w-full bg-orange-600 hover:bg-orange-700"
