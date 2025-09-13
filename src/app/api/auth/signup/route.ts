@@ -6,10 +6,10 @@ const prisma = new PrismaClient()
 
 export async function POST(request: NextRequest) {
   try {
-    const { 
-      email, 
-      name, 
-      password, 
+    const {
+      email,
+      name,
+      password,
       phoneNumber,
       addressType,
       address,
@@ -21,8 +21,17 @@ export async function POST(request: NextRequest) {
       apartmentNumber,
       city,
       neighborhood,
-      businessName
+      businessName,
+      zoneId
     } = await request.json()
+
+    // Debug log received data
+    console.log('📥 [Signup API] Received signup data:')
+    console.log('   - Email:', email)
+    console.log('   - Name:', name)
+    console.log('   - Address:', address)
+    console.log('   - Coordinates:', mapPinLat, mapPinLng)
+    console.log('   - Zone ID:', zoneId)
 
     if (!email || !password || !name) {
       return NextResponse.json(
@@ -64,13 +73,21 @@ export async function POST(request: NextRequest) {
         city,
         neighborhood,
         businessName,
+        zoneId,
       },
     })
 
+    console.log('✅ [Signup API] User created successfully:')
+    console.log('   - User ID:', user.id)
+    console.log('   - Email:', user.email)
+    console.log('   - Address saved:', address)
+    console.log('   - Coordinates saved:', mapPinLat, mapPinLng)
+    console.log('   - Zone ID saved:', zoneId)
+
     return NextResponse.json(
-      { 
+      {
         message: "User created successfully",
-        user: { id: user.id, email: user.email, name: user.name }
+        user: { id: user.id, email: user.email, name: user.name, zoneId: zoneId }
       },
       { status: 201 }
     )

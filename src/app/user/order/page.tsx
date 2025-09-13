@@ -39,6 +39,8 @@ export default function PlaceOrder() {
   const [loadingPrices, setLoadingPrices] = useState(true)
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [userZone, setUserZone] = useState<any>(null)
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null)
 
   const selectedTank = tankPrices.find(tank => tank.type === selectedType)
   const totalPrice = selectedTank ? (selectedTank.basePrice + selectedTank.deliveryFee) * quantity : 0
@@ -80,7 +82,33 @@ export default function PlaceOrder() {
         if (data.success && data.user) {
           setDeliveryAddress(data.user.address || '')
           setPhoneNumber(data.user.phoneNumber || '')
-          
+          setUserZone(data.user.zone)
+
+          // Set user location from coordinates
+          if (data.user.mapPinLat && data.user.mapPinLng) {
+            setUserLocation({
+              lat: data.user.mapPinLat,
+              lng: data.user.mapPinLng
+            })
+          }
+
+          console.log('🏠 [Order] User profile loaded:')
+          console.log('   - Address:', data.user.address)
+          console.log('   - Zone:', data.user.zone)
+          console.log('   - Coordinates:', data.user.mapPinLat, data.user.mapPinLng)
+
+          // Check if address is just the zone name and suggest alternatives
+          if (data.user.zone && data.user.address === data.user.zone.name) {
+            console.log('⚠️ [Order] Address is same as zone name - this needs user correction')
+
+            // Add a helpful message in the address field
+            if (data.user.city || data.user.neighborhood) {
+              const suggestedAddress = [data.user.neighborhood, data.user.city].filter(Boolean).join(', ')
+              console.log('💡 [Order] Suggesting address based on city/neighborhood:', suggestedAddress)
+              setDeliveryAddress(suggestedAddress)
+            }
+          }
+
           if (data.user.address && data.user.phoneNumber) {
             toast.success('Your delivery info has been loaded from your profile!')
           }
@@ -260,6 +288,26 @@ export default function PlaceOrder() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Zone Information */}
+              {userZone && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: userZone.color }}
+                    />
+                    <span className="text-sm font-medium text-green-800">
+                      Delivery Zone: {userZone.name}
+                    </span>
+                  </div>
+                  {userZone.deliveryFee && userZone.deliveryFee > 0 && (
+                    <p className="text-xs text-green-700">
+                      Zone delivery fee: {userZone.deliveryFee.toLocaleString()} IQD
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="address">Delivery Address</Label>
                 <div className="flex gap-2 mt-2">
@@ -275,6 +323,37 @@ export default function PlaceOrder() {
                     <Navigation className="h-4 w-4" />
                   </Button>
                 </div>
+
+                {/* Address correction notice */}
+                {(deliveryAddress && userZone && deliveryAddress.includes(userZone.name)) && (
+                  <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-sm">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1">
+                        <p className="text-amber-800">
+                          <strong>⚠️ Address Notice:</strong> Your address is showing the zone name "{userZone.name}" instead of your street address.
+                          Please edit the field above to enter your actual street address.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setDeliveryAddress('')}
+                        className="text-amber-700 border-amber-300 hover:bg-amber-100"
+                      >
+                        Clear & Fix
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {userLocation && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    <span>📍 Precise coordinates: {userLocation.lat.toFixed(6)}, {userLocation.lng.toFixed(6)}</span>
+                    {userZone && (
+                      <span className="ml-2">• Zone: {userZone.name}</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <Label htmlFor="phone">Contact Phone</Label>

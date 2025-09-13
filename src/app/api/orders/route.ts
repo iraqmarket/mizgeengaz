@@ -78,9 +78,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user by email
+    // Find user by email and include zone information
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+      where: { email: session.user.email },
+      include: {
+        zone: true
+      }
     })
 
     if (!user) {
@@ -89,6 +92,14 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       )
     }
+
+    console.log('📦 [Orders] Creating order for user:')
+    console.log('   - User ID:', user.id)
+    console.log('   - User zone ID:', user.zoneId)
+    console.log('   - User zone name:', user.zone?.name)
+    console.log('   - Tank type:', tankType)
+    console.log('   - Quantity:', quantity)
+    console.log('   - Delivery address:', deliveryAddress)
 
     // Find the price for the selected tank type
     const price = await prisma.price.findUnique({
@@ -105,7 +116,7 @@ export async function POST(request: NextRequest) {
     // Calculate total price
     const totalPrice = (price.basePrice + price.deliveryFee) * quantity
 
-    // Create the order
+    // Create the order with zone information
     const order = await prisma.order.create({
       data: {
         userId: user.id,
@@ -114,9 +125,15 @@ export async function POST(request: NextRequest) {
         totalPrice,
         deliveryAddress,
         phoneNumber,
-        status: 'PENDING'
+        status: 'PENDING',
+        zoneId: user.zoneId // ← This is the key fix!
       }
     })
+
+    console.log('✅ [Orders] Order created successfully:')
+    console.log('   - Order ID:', order.id)
+    console.log('   - Zone ID set to:', order.zoneId)
+    console.log('   - Status:', order.status)
 
     return NextResponse.json({ order }, { status: 201 })
   } catch (error) {

@@ -19,7 +19,11 @@ export async function GET() {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: {
-        driver: true
+        driver: {
+          include: {
+            assignedZone: true
+          }
+        }
       }
     })
 
@@ -30,8 +34,35 @@ export async function GET() {
       )
     }
 
+    console.log('🚚 [Driver Orders] Driver info:')
+    console.log('   - Driver ID:', user.driver.id)
+    console.log('   - Driver assigned zone ID:', user.driver.assignedZoneId)
+    console.log('   - Driver assigned zone name:', user.driver.assignedZone?.name)
+
+    // If driver has no assigned zone, return empty array
+    if (!user.driver.assignedZoneId) {
+      console.log('❌ [Driver Orders] Driver has no assigned zone')
+      return NextResponse.json({
+        orders: [],
+        message: "No delivery zone assigned to this driver"
+      })
+    }
+
+    console.log('🔍 [Driver Orders] Searching for orders in zone:', user.driver.assignedZoneId)
+
+    // Get orders from the driver's assigned zone that are available for pickup
     const orders = await prisma.order.findMany({
-      where: { driverId: user.driver.id },
+      where: {
+        zoneId: user.driver.assignedZoneId,
+        status: {
+          in: ['PENDING', 'CONFIRMED', 'ASSIGNED', 'IN_TRANSIT']
+        },
+        // Show orders assigned to this driver or unassigned orders in their zone
+        OR: [
+          { driverId: user.driver.id },
+          { driverId: null, status: { in: ['PENDING', 'CONFIRMED'] } }
+        ]
+      },
       include: {
         user: {
           select: {
@@ -40,12 +71,31 @@ export async function GET() {
             email: true,
             phoneNumber: true,
           }
+        },
+        zone: {
+          select: {
+            id: true,
+            name: true,
+            color: true
+          }
         }
       },
-      orderBy: {
-        createdAt: 'desc'
-      }
+      orderBy: [
+        { driverId: 'desc' }, // Assigned orders first
+        { createdAt: 'desc' }
+      ]
     })
+
+    console.log('📊 [Driver Orders] Query results:')
+    console.log('   - Found orders:', orders.length)
+    console.log('   - Order details:', orders.map(o => ({
+      id: o.id,
+      status: o.status,
+      zoneId: o.zoneId,
+      zoneName: o.zone?.name,
+      driverId: o.driverId,
+      customerName: o.user.name
+    })))
 
     return NextResponse.json({ orders })
   } catch (error) {

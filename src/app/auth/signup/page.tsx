@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Truck, MapPin, Navigation, Loader2, ChevronRight, ChevronLeft, Check, User, Mail, Lock, Phone, Home, Building2 } from "lucide-react"
+import { Truck, MapPin, Navigation, Loader2, ChevronRight, ChevronLeft, Check, User, Mail, Lock, Phone, Home, Building2, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
-import GoogleMap from "@/components/GoogleMap"
+import ZoneAwareLocationPicker from "@/components/ZoneAwareLocationPicker"
+import { DeliveryZone } from "@/lib/zones"
 
 type AddressType = 'HOME' | 'BUSINESS' | 'APARTMENT'
 
@@ -24,6 +25,8 @@ export default function SignUp() {
   const [address, setAddress] = useState("")
   const [mapPinLat, setMapPinLat] = useState("")
   const [mapPinLng, setMapPinLng] = useState("")
+  const [selectedZone, setSelectedZone] = useState<DeliveryZone | null>(null)
+  const [locationServiceable, setLocationServiceable] = useState<boolean | null>(null)
   const [complexName, setComplexName] = useState("")
   const [buildingNumber, setBuildingNumber] = useState("")
   const [floorNumber, setFloorNumber] = useState("")
@@ -32,6 +35,7 @@ export default function SignUp() {
   const [neighborhood, setNeighborhood] = useState("")
   const [businessName, setBusinessName] = useState("")
   const [showMapPicker, setShowMapPicker] = useState(false)
+  const [locationValidationError, setLocationValidationError] = useState<string | null>(null)
   const [googleMapsApiKey, setGoogleMapsApiKey] = useState("")
   const [mapDefaultLat, setMapDefaultLat] = useState(33.3152)
   const [mapDefaultLng, setMapDefaultLng] = useState(44.3661)
@@ -320,6 +324,16 @@ export default function SignUp() {
       return
     }
 
+    // Debug log the data being sent
+    console.log('📝 [Signup] Submitting user data:')
+    console.log('   - Email:', email)
+    console.log('   - Name:', name)
+    console.log('   - Address:', address)
+    console.log('   - Coordinates:', mapPinLat, mapPinLng)
+    console.log('   - Selected Zone:', selectedZone)
+    console.log('   - Zone ID:', selectedZone?.id)
+    console.log('   - Location Serviceable:', locationServiceable)
+
     try {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
@@ -342,6 +356,7 @@ export default function SignUp() {
           city: city || undefined,
           neighborhood: neighborhood || undefined,
           businessName: businessName || undefined,
+          zoneId: selectedZone?.id || undefined,
         }),
       })
 
@@ -361,9 +376,39 @@ export default function SignUp() {
     }
   }
 
+  const handleLocationChange = (location: {
+    lat: number
+    lng: number
+    address: string
+    zone?: DeliveryZone
+    isServiceable: boolean
+  }) => {
+    console.log('📥 [Signup] Received location data from picker:', location)
+    console.log('   - Address received:', location.address)
+    console.log('   - Zone received:', location.zone?.name)
+
+    setMapPinLat(location.lat.toString())
+    setMapPinLng(location.lng.toString())
+    setAddress(location.address)
+    setSelectedZone(location.zone || null)
+    setLocationServiceable(location.isServiceable)
+
+    console.log('📝 [Signup] State updated:')
+    console.log('   - address state set to:', location.address)
+    console.log('   - selectedZone set to:', location.zone?.name)
+
+    if (!location.isServiceable) {
+      setLocationValidationError(
+        "Your selected location is outside our delivery zones. Please choose a location within a highlighted zone or contact us for delivery options."
+      )
+    } else {
+      setLocationValidationError(null)
+    }
+  }
+
   const validateStep = (step: number): string[] => {
     const errors: string[] = []
-    
+
     switch (step) {
       case 1:
         if (!name.trim()) errors.push("Name is required")
@@ -373,10 +418,13 @@ export default function SignUp() {
         if (password !== confirmPassword) errors.push("Passwords don't match")
         break
       case 2:
-        // Phone and address are optional, so no validation needed
+        // Check if location is provided and serviceable for delivery
+        if (mapPinLat && mapPinLng && locationServiceable === false) {
+          errors.push("Please select a location within our delivery zones")
+        }
         break
     }
-    
+
     return errors
   }
 
@@ -559,63 +607,71 @@ export default function SignUp() {
           </select>
         </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <Label htmlFor="address" className="flex items-center gap-2">
-              <MapPin className="w-4 h-4" />
-              Street Address (Optional)
-            </Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={getCurrentLocation}
-              disabled={isLoadingLocation}
-              className="flex items-center gap-2 text-sm"
-            >
-              {isLoadingLocation ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Navigation className="h-4 w-4" />
-              )}
-              {isLoadingLocation ? 'Getting Location...' : 'Use Current Location'}
-            </Button>
+        {/* Location Validation Error */}
+        {locationValidationError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-red-800">Location Not Serviceable</p>
+                <p className="text-sm text-red-700 mt-1">{locationValidationError}</p>
+              </div>
+            </div>
           </div>
-          <Input
-            id="address"
-            type="text"
-            placeholder="Enter your street address or use current location"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="mt-1"
-          />
-        </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="mapPinLat">Latitude (Optional)</Label>
-            <Input
-              id="mapPinLat"
-              type="number"
-              step="any"
-              placeholder="e.g., 40.7128"
-              value={mapPinLat}
-              onChange={(e) => setMapPinLat(e.target.value)}
-              className="mt-1"
+        {/* Enhanced Location Picker */}
+        <div>
+          <Label className="text-base font-medium mb-4 block">
+            Delivery Location {mapPinLat && mapPinLng ? '' : '(Optional)'}
+          </Label>
+          <p className="text-sm text-gray-600 mb-4">
+            Select your location to see if we deliver to your area. We'll show you available delivery zones.
+          </p>
+
+          {googleMapsApiKey ? (
+            <ZoneAwareLocationPicker
+              apiKey={googleMapsApiKey}
+              defaultCenter={{ lat: mapDefaultLat, lng: mapDefaultLng }}
+              onLocationChange={handleLocationChange}
+              selectedLocation={
+                mapPinLat && mapPinLng && address
+                  ? {
+                      lat: parseFloat(mapPinLat),
+                      lng: parseFloat(mapPinLng),
+                      address
+                    }
+                  : undefined
+              }
             />
-          </div>
-          <div>
-            <Label htmlFor="mapPinLng">Longitude (Optional)</Label>
-            <Input
-              id="mapPinLng"
-              type="number"
-              step="any"
-              placeholder="e.g., -74.0060"
-              value={mapPinLng}
-              onChange={(e) => setMapPinLng(e.target.value)}
-              className="mt-1"
-            />
-          </div>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-yellow-800">Map Not Available</p>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    Google Maps is not configured. You can still create an account, but location features won't be available.
+                  </p>
+                </div>
+              </div>
+
+              {/* Fallback manual input */}
+              <div className="mt-4 space-y-3">
+                <div>
+                  <Label htmlFor="address">Manual Address Entry</Label>
+                  <Input
+                    id="address"
+                    type="text"
+                    placeholder="Enter your address manually"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* City and Neighborhood for HOME address type */}
@@ -623,108 +679,31 @@ export default function SignUp() {
           <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-lg border border-green-200">
             <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Home className="w-4 h-4 text-green-600" />
-              Home Address Details
+              Additional Home Details (Optional)
             </h4>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    type="text"
-                    placeholder="Enter your city"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="mt-1 bg-white"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="neighborhood">Neighborhood</Label>
-                  <Input
-                    id="neighborhood"
-                    type="text"
-                    placeholder="Enter your neighborhood"
-                    value={neighborhood}
-                    onChange={(e) => setNeighborhood(e.target.value)}
-                    className="mt-1 bg-white"
-                  />
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="city">City</Label>
+                <Input
+                  id="city"
+                  type="text"
+                  placeholder="Enter your city"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className="mt-1 bg-white"
+                />
               </div>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowMapPicker(!showMapPicker)}
-                  className="flex items-center gap-2"
-                >
-                  <MapPin className="w-4 h-4" />
-                  {showMapPicker ? 'Hide Map' : 'Pick Location on Map'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => getUserLocation(true)}
-                  disabled={isGettingLocation}
-                  className="flex items-center gap-2"
-                >
-                  {isGettingLocation ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Navigation className="w-4 h-4" />
-                  )}
-                  {isGettingLocation ? 'Detecting...' : 'Use My Location'}
-                </Button>
+              <div>
+                <Label htmlFor="neighborhood">Neighborhood</Label>
+                <Input
+                  id="neighborhood"
+                  type="text"
+                  placeholder="Enter your neighborhood"
+                  value={neighborhood}
+                  onChange={(e) => setNeighborhood(e.target.value)}
+                  className="mt-1 bg-white"
+                />
               </div>
-              {showMapPicker && googleMapsApiKey && (
-                <div className="mt-4">
-                  <GoogleMap
-                    apiKey={googleMapsApiKey}
-                    center={getMapCenter()}
-                    zoom={15}
-                    height="300px"
-                    onMapReady={(map) => {
-                      map.addListener('click', (event: any) => {
-                        const lat = event.latLng.lat()
-                        const lng = event.latLng.lng()
-                        setMapPinLat(lat.toString())
-                        setMapPinLng(lng.toString())
-                        
-                        // Reverse geocoding
-                        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
-                          .then(response => response.json())
-                          .then(data => {
-                            if (data.address) {
-                              setCity(data.address.city || data.address.town || data.address.village || '')
-                              setNeighborhood(data.address.suburb || data.address.neighbourhood || '')
-                              setAddress(data.display_name || `${lat}, ${lng}`)
-                            }
-                          })
-                          .catch(() => {
-                            setAddress(`${lat}, ${lng}`)
-                          })
-                      })
-                    }}
-                    markers={mapPinLat && mapPinLng ? [{
-                      id: 'home-location',
-                      position: { lat: parseFloat(mapPinLat), lng: parseFloat(mapPinLng) },
-                      title: 'Home Location',
-                      type: 'customer'
-                    }] : []}
-                  />
-                  <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
-                    <p className="text-xs text-blue-800">
-                      💡 <strong>How to use:</strong> Click anywhere on the map to pin your exact location, or use "Use My Location" button to auto-detect your current position.
-                    </p>
-                  </div>
-                </div>
-              )}
-              {showMapPicker && !googleMapsApiKey && (
-                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-yellow-800 text-sm">
-                    Google Maps API key not configured. Please ask an administrator to configure the Google Maps API key in the admin settings.
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -736,89 +715,16 @@ export default function SignUp() {
               <Building2 className="w-4 h-4 text-orange-600" />
               Business Details
             </h4>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="businessName">Business Name</Label>
-                <Input
-                  id="businessName"
-                  type="text"
-                  placeholder="Enter your business name"
-                  value={businessName}
-                  onChange={(e) => setBusinessName(e.target.value)}
-                  className="mt-1 bg-white"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowMapPicker(!showMapPicker)}
-                  className="flex items-center gap-2"
-                >
-                  <MapPin className="w-4 h-4" />
-                  {showMapPicker ? 'Hide Map' : 'Pin Business Location'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => getUserLocation(true)}
-                  disabled={isGettingLocation}
-                  className="flex items-center gap-2"
-                >
-                  {isGettingLocation ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Navigation className="w-4 h-4" />
-                  )}
-                  {isGettingLocation ? 'Detecting...' : 'Use My Location'}
-                </Button>
-              </div>
-              {showMapPicker && googleMapsApiKey && (
-                <div className="mt-4">
-                  <GoogleMap
-                    apiKey={googleMapsApiKey}
-                    center={getMapCenter()}
-                    zoom={15}
-                    height="300px"
-                    onMapReady={(map) => {
-                      map.addListener('click', (event: any) => {
-                        const lat = event.latLng.lat()
-                        const lng = event.latLng.lng()
-                        setMapPinLat(lat.toString())
-                        setMapPinLng(lng.toString())
-                        
-                        // Reverse geocoding
-                        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
-                          .then(response => response.json())
-                          .then(data => {
-                            setAddress(data.display_name || `${lat}, ${lng}`)
-                          })
-                          .catch(() => {
-                            setAddress(`${lat}, ${lng}`)
-                          })
-                      })
-                    }}
-                    markers={mapPinLat && mapPinLng ? [{
-                      id: 'business-location',
-                      position: { lat: parseFloat(mapPinLat), lng: parseFloat(mapPinLng) },
-                      title: businessName || 'Business Location',
-                      type: 'delivery'
-                    }] : []}
-                  />
-                  <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
-                    <p className="text-xs text-blue-800">
-                      💡 <strong>How to use:</strong> Click anywhere on the map to pin your business location, or use "Use My Location" button to auto-detect your current position.
-                    </p>
-                  </div>
-                </div>
-              )}
-              {showMapPicker && !googleMapsApiKey && (
-                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-yellow-800 text-sm">
-                    Google Maps API key not configured. Please ask an administrator to configure the Google Maps API key in the admin settings.
-                  </p>
-                </div>
-              )}
+            <div>
+              <Label htmlFor="businessName">Business Name</Label>
+              <Input
+                id="businessName"
+                type="text"
+                placeholder="Enter your business name"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                className="mt-1 bg-white"
+              />
             </div>
           </div>
         )}
@@ -913,6 +819,13 @@ export default function SignUp() {
             <p><span className="font-medium">Phone:</span> {phoneNumber || 'Not provided'}</p>
             <p><span className="font-medium">Address Type:</span> {addressType}</p>
             <p><span className="font-medium">Address:</span> {address || 'Not provided'}</p>
+            {selectedZone && (
+              <p><span className="font-medium">Delivery Zone:</span> {selectedZone.name}
+                {selectedZone.deliveryFee && selectedZone.deliveryFee > 0 && (
+                  <span className="text-blue-600 ml-1">({selectedZone.deliveryFee.toLocaleString()} IQD delivery fee)</span>
+                )}
+              </p>
+            )}
             {addressType === 'HOME' && (city || neighborhood) && (
               <div className="mt-3 p-3 bg-white rounded border">
                 <p className="font-medium mb-2">Home Details:</p>

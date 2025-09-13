@@ -31,6 +31,17 @@ export async function GET(request: NextRequest) {
         buildingNumber: true,
         floorNumber: true,
         apartmentNumber: true,
+        city: true,
+        neighborhood: true,
+        zoneId: true,
+        zone: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            deliveryFee: true
+          }
+        }
       }
     })
 
@@ -41,6 +52,42 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Format the address better if it looks like coordinates
+    let displayAddress = user.address
+
+    console.log('🏠 [Profile API] Raw user data:')
+    console.log('   - Raw Address:', user.address)
+    console.log('   - City:', user.city)
+    console.log('   - Neighborhood:', user.neighborhood)
+    console.log('   - Zone:', user.zone?.name)
+    console.log('   - Coordinates:', user.mapPinLat, user.mapPinLng)
+
+    // Check if address looks like coordinates and needs formatting
+    if (user.address && user.address.match(/^\d+\.\d+,\s*\d+\.\d+$/)) {
+      // Address is coordinates, try to create a better display
+      console.log('📍 [Profile API] Address appears to be coordinates, formatting...')
+      if (user.city || user.neighborhood) {
+        displayAddress = [user.neighborhood, user.city].filter(Boolean).join(', ')
+        console.log('🏘️ [Profile API] Using city/neighborhood:', displayAddress)
+      } else {
+        // Don't use zone name for address - keep coordinates as fallback for now
+        displayAddress = user.address // Keep coordinates as fallback
+        console.log('📍 [Profile API] Keeping coordinates as fallback (not using zone name as address)')
+      }
+    } else if (user.address && user.address === user.zone?.name) {
+      // Address is the same as zone name - this is wrong, we need to fix it
+      console.log('⚠️ [Profile API] Address is same as zone name, this is incorrect!')
+      if (user.city || user.neighborhood) {
+        displayAddress = [user.neighborhood, user.city].filter(Boolean).join(', ')
+        console.log('🏘️ [Profile API] Using city/neighborhood instead of zone name:', displayAddress)
+      } else {
+        displayAddress = `${user.mapPinLat?.toFixed(6)}, ${user.mapPinLng?.toFixed(6)}`
+        console.log('📍 [Profile API] Using coordinates instead of zone name:', displayAddress)
+      }
+    } else {
+      console.log('📍 [Profile API] Using raw address as-is:', displayAddress)
+    }
+
     return NextResponse.json({
       success: true,
       user: {
@@ -48,7 +95,8 @@ export async function GET(request: NextRequest) {
         email: user.email,
         name: user.name,
         phoneNumber: user.phoneNumber,
-        address: user.address, // Return the raw address, not formatted
+        address: displayAddress,
+        rawAddress: user.address, // Keep original for editing
         addressType: user.addressType,
         mapPinLat: user.mapPinLat,
         mapPinLng: user.mapPinLng,
@@ -56,6 +104,9 @@ export async function GET(request: NextRequest) {
         buildingNumber: user.buildingNumber,
         floorNumber: user.floorNumber,
         apartmentNumber: user.apartmentNumber,
+        city: user.city,
+        neighborhood: user.neighborhood,
+        zone: user.zone,
         hasCompleteProfile: !!(user.phoneNumber && user.address)
       }
     })

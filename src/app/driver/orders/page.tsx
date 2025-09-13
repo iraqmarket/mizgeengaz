@@ -37,15 +37,25 @@ interface DriverOrder {
   totalPrice: number
   deliveryAddress: string
   phoneNumber: string
-  status: 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
+  status: 'PENDING' | 'CONFIRMED' | 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
   scheduledAt?: string
   deliveredAt?: string
   createdAt: string
   updatedAt: string
+  driverId?: string
+  zone?: {
+    id: string
+    name: string
+    color: string
+  }
 }
 
 const getStatusColor = (status: string) => {
   switch (status) {
+    case 'PENDING':
+      return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    case 'CONFIRMED':
+      return 'bg-blue-100 text-blue-800 border-blue-200'
     case 'ASSIGNED':
       return 'bg-purple-100 text-purple-800 border-purple-200'
     case 'IN_TRANSIT':
@@ -61,14 +71,18 @@ const getStatusColor = (status: string) => {
 
 const getStatusIcon = (status: string) => {
   switch (status) {
+    case 'PENDING':
+      return <Clock className="h-4 w-4" />
+    case 'CONFIRMED':
+      return <CheckCircle className="h-4 w-4" />
+    case 'ASSIGNED':
+      return <User className="h-4 w-4" />
+    case 'IN_TRANSIT':
+      return <Truck className="h-4 w-4" />
     case 'DELIVERED':
       return <CheckCircle className="h-4 w-4" />
     case 'CANCELLED':
       return <XCircle className="h-4 w-4" />
-    case 'IN_TRANSIT':
-      return <Truck className="h-4 w-4" />
-    case 'ASSIGNED':
-      return <Clock className="h-4 w-4" />
     default:
       return <Clock className="h-4 w-4" />
   }
@@ -154,30 +168,61 @@ export default function DriverOrders() {
     }
   }
 
+  const handleAcceptOrder = async (orderId: string) => {
+    try {
+      const response = await fetch(`/api/driver/orders/${orderId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'accept_order' }),
+      })
+
+      if (response.ok) {
+        toast.success('Order accepted!')
+        fetchOrders() // Refresh
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to accept order')
+      }
+    } catch (error) {
+      console.error('Error accepting order:', error)
+      toast.error('Failed to accept order')
+    }
+  }
+
   const filteredOrders = orders.filter(order => {
     const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          order.user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesStatus = statusFilter === "ALL" || order.status === statusFilter
-    
+                         order.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         order.zone?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+
+    let matchesStatus = false
+    if (statusFilter === "ALL") {
+      matchesStatus = true
+    } else if (statusFilter === "AVAILABLE") {
+      matchesStatus = ['PENDING', 'CONFIRMED'].includes(order.status)
+    } else {
+      matchesStatus = order.status === statusFilter
+    }
+
     return matchesSearch && matchesStatus
   })
 
   const statusCounts = {
     ALL: orders.length,
+    AVAILABLE: orders.filter(o => ['PENDING', 'CONFIRMED'].includes(o.status)).length,
     ASSIGNED: orders.filter(o => o.status === 'ASSIGNED').length,
     IN_TRANSIT: orders.filter(o => o.status === 'IN_TRANSIT').length,
     DELIVERED: orders.filter(o => o.status === 'DELIVERED').length,
-    CANCELLED: orders.filter(o => o.status === 'CANCELLED').length,
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">My Deliveries</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Zone Deliveries</h1>
         <p className="text-gray-600 mt-2">
-          Manage your assigned orders and deliveries
+          View and manage orders from your assigned delivery zone
         </p>
       </div>
 
@@ -209,7 +254,7 @@ export default function DriverOrders() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Search orders by ID, customer name, or address..."
+                  placeholder="Search orders by ID, customer name, address, or zone..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -218,16 +263,16 @@ export default function DriverOrders() {
             </div>
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-gray-500" />
-              <select 
+              <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
               >
                 <option value="ALL">All Orders</option>
+                <option value="AVAILABLE">Available</option>
                 <option value="ASSIGNED">Assigned</option>
                 <option value="IN_TRANSIT">In Transit</option>
                 <option value="DELIVERED">Delivered</option>
-                <option value="CANCELLED">Cancelled</option>
               </select>
             </div>
           </div>
@@ -271,10 +316,21 @@ export default function DriverOrders() {
                       </div>
                       <div>
                         <h3 className="font-semibold text-gray-900 text-lg">{order.id}</h3>
-                        <p className="text-sm text-gray-500">
-                          Assigned {new Date(order.createdAt).toLocaleDateString('en-GB')} at{' '}
-                          {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-sm text-gray-500">
+                            {new Date(order.createdAt).toLocaleDateString('en-GB')} at{' '}
+                            {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                          {order.zone && (
+                            <div className="flex items-center gap-1">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: order.zone.color }}
+                              ></div>
+                              <span className="text-xs font-medium text-gray-600">{order.zone.name}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -337,10 +393,21 @@ export default function DriverOrders() {
 
                   {/* Order Actions */}
                   <div className="flex items-center gap-2 pt-4 border-t">
+                    {(['PENDING', 'CONFIRMED'].includes(order.status) && !order.driverId) && (
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => handleAcceptOrder(order.id)}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Accept Order
+                      </Button>
+                    )}
+
                     {order.status === 'ASSIGNED' && (
                       <>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="bg-blue-600 hover:bg-blue-700"
                           onClick={() => handleStartDelivery(order.id)}
                         >
